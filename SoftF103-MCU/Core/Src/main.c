@@ -32,6 +32,7 @@
 #define EXTERN_MEM
 #define MEM_INITIATOR
 #include "softf103.h"
+extern void usb_fifo_transmit(void);
 SoftF103_Mem_t mem;
 SoftIO_t sio;
 void __aeabi_assert(const char *expr, const char *file, int line) {
@@ -68,7 +69,24 @@ void SystemClock_Config(void);
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
-
+void my_write_before(void* softio, SoftIO_Head_t* head) {
+  assert(softio && head);
+}
+void my_write_after(void* softio, SoftIO_Head_t* head) {
+  if (softio_is_variable_included(sio, *head, mem.gpio_out)) {
+    GPIOB->BSRR = mem.gpio_out | ( ((uint32_t)(~mem.gpio_out & 0x0ff))<<16 );  // atomic write
+  }
+}
+void my_before(void* softio, SoftIO_Head_t* head) {
+  if (head->type == SOFTIO_HEAD_TYPE_READ) {
+    if (softio_is_variable_included(sio, *head, mem.gpio_in)) {  // wanna read variable
+      mem.gpio_in = GPIOB->IDR >> 8;  // PB15 ~ PB8
+    }
+  }
+}
+void my_after(void* softio, SoftIO_Head_t* head) {
+  assert(softio && head);
+}
 /* USER CODE END 0 */
 
 /**
@@ -96,6 +114,10 @@ int main(void)
 
   /* USER CODE BEGIN SysInit */
   memory_init_user_code_begin_sys_init();
+  sio.write_before = my_write_before;
+	sio.write_after = my_write_after;
+  sio.before = my_before;
+	sio.after = my_after;
   /* USER CODE END SysInit */
 
   /* Initialize all configured peripherals */
@@ -124,6 +146,8 @@ int main(void)
   /* USER CODE BEGIN WHILE */
   while (1)
   {
+    softio_try_handle_all(sio);  // handle commands and return, non-blocking function
+    usb_fifo_transmit();
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */

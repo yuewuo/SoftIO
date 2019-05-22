@@ -133,6 +133,13 @@ static int8_t CDC_Control_FS(uint8_t cmd, uint8_t* pbuf, uint16_t length);
 static int8_t CDC_Receive_FS(uint8_t* pbuf, uint32_t *Len);
 
 /* USER CODE BEGIN PRIVATE_FUNCTIONS_DECLARATION */
+void usb_fifo_transmit(void) {
+	if (((USBD_CDC_HandleTypeDef*)(hUsbDeviceFS.pClassData))->TxState == 0 && !fifo_empty(&mem.siotx)) {  // has to be this!
+		// int i; for (i=0; i<APP_TX_DATA_SIZE && !fifo_empty(&mem.siotx); ++i) UserTxBufferFS[i] = fifo_deque(&mem.siotx);
+		uint32_t i = fifo_move_to_buffer((char*)UserTxBufferFS, &mem.siotx, APP_TX_DATA_SIZE);  // improve performance
+		if (i) CDC_Transmit_FS(UserTxBufferFS, i);  // print_debug("send %d byte", i);
+  }
+}
 
 /* USER CODE END PRIVATE_FUNCTIONS_DECLARATION */
 

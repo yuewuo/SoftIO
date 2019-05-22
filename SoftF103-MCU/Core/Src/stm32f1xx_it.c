@@ -266,6 +266,8 @@ void USART2_IRQHandler(void)
   /* USER CODE BEGIN USART2_IRQn 0 */
   if (USART2->SR & USART_SR_TXE) {  // transmit done, need to fetch from fifo?
     // write USART2->DR to send next byte
+    // if no more to send, close the interrupt
+    USART2->CR1 &= ~USART_CR1_TXEIE;  // disable tx empty interrupt
 	}
   if (USART2->SR & USART_SR_RXNE) {  // receive message here
     // data is in USART2->DR

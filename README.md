@@ -51,6 +51,8 @@ Despite all the design above, you should be able to simply write and read MCU me
 
 ![stm32f103c8t6.jpg](stm32f103c8t6.jpg)
 
+(Besides taking off the jump cap of BOOT1, you might need to remove the 10kΩ resistance behind the board, or you can just skip PB2...... see [this link](http://stm32duino.com/viewtopic.php?f=44&t=637&hilit=PB2&start=70#p16222) for more information to use PB2)
+
 STM32F103C8T6 features a internal USB full-speed controller, a 72MHz Cortex-M3 core, 64KB Flash memory, 20KB RAM size and lots of peripherals. The USB controller could be configured as CDC (communication device class) which usually show as a serial port on PC.
 
 To program the device, you also need a ST-LinkV2 programmer which is also about $5 (you might be surprise that ST-LinkV2 is just a STM32F103C8T6 chip!), and connect it to the right side 4 pin. Note that with the USB cable connected (left in the picture), you should disconnect VCC in the right side, connecting only GND, SWDIO and SWCLK.

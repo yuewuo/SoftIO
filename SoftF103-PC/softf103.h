@@ -44,13 +44,13 @@ typedef struct {
 
 	uint32_t mem_size;  // sizeof(ReaderH7_Mem_t)
 
-// read adc value immediately
-	uint16_t adc1;
-	uint16_t adc2;
-
 // GPIO functions
 	uint8_t gpio_out;  // write to this variable will immediately update GPIO value of PB0 ~ PB7
 	uint8_t gpio_in;  // read PB8 ~ PB15
+
+// read adc value immediately
+	uint16_t adc1;
+	uint16_t adc2;
 
 // previous statistics
 	uint16_t siorx_overflow;
@@ -99,7 +99,3 @@ void memory_init_user_code_begin_sys_init(void) {
 	SOFTIO_QUICK_INIT(sio, mem, Mem_FifoInit);
 }
 #endif
-
-#undef Mem_FifoInit  // it is no use later, to avoid namespace pollution
-#undef MCU_VERSION
-#undef MCU_PID
