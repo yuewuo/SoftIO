@@ -43,6 +43,8 @@ typedef struct {
     uint32_t version;  // 系统版本，见compile_conf.h
 
 	uint32_t mem_size;  // sizeof(ReaderH7_Mem_t)
+	
+	uint16_t siorx_overflow;
 
 // GPIO functions
 	uint8_t gpio_out;  // write to this variable will immediately update GPIO value of PB0 ~ PB7
@@ -52,8 +54,8 @@ typedef struct {
 	uint16_t adc1;
 	uint16_t adc2;
 
-// previous statistics
-	uint16_t siorx_overflow;
+// LED functions
+	uint8_t led;  // write 1 to open the LED and write 0 to close. only the LSB is used
 
 	char siorx_buf[1024];
 	char siotx_buf[1024];

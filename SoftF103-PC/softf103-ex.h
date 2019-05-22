@@ -29,6 +29,7 @@ struct SoftF103Host_t {
 // GPIO control
 	void GPIO_write(uint8_t output);
 	uint8_t GPIO_read();
+	void LED_set(bool opened);
 };
 
 #ifdef SOFTF103HOST_IMPLEMENTATION
@@ -93,13 +94,14 @@ int SoftF103Host_t::dump(int elements) {
 	assert(com && "device not opened");
 	lock.lock();
 	if (elements & DUMP_BASIC) {
-		softio_blocking(read_between, sio, mem.status, mem.mem_size);
+		softio_blocking(read_between, sio, mem.status, mem.siorx_overflow);
 		printf("[basic information]\n");
 		printf("  1. status: 0x%02X [%s]\n", mem.status, STATUS_STR(mem.status));
 		printf("  2. verbose_level: 0x%02X\n", mem.verbose_level);
 		printf("  3. pid: 0x%04X\n", mem.pid);
 		printf("  4. version: 0x%08X\n", mem.version);
 		printf("  5. mem_size: %d\n", (int)mem.mem_size);
+		printf("  6. siorx_overflow: %d\n", (int)mem.siorx_overflow);
 	}
 	if (elements & DUMP_GPIO) {
 		softio_blocking(read_between, sio, mem.gpio_out, mem.gpio_in);
@@ -127,6 +129,13 @@ uint8_t SoftF103Host_t::GPIO_read() {
 	softio_blocking(read, sio, mem.gpio_in);
 	lock.unlock();
 	return mem.gpio_in;
+}
+
+void SoftF103Host_t::LED_set(bool opened) {
+	lock.lock();
+	mem.led = opened;
+	softio_blocking(write, sio, mem.led);
+	lock.unlock();
 }
 
 #endif

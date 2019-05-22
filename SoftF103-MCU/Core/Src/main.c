@@ -76,6 +76,9 @@ void my_write_after(void* softio, SoftIO_Head_t* head) {
   if (softio_is_variable_included(sio, *head, mem.gpio_out)) {
     GPIOB->BSRR = mem.gpio_out | ( ((uint32_t)(~mem.gpio_out & 0x0ff))<<16 );  // atomic write
   }
+  if (softio_is_variable_included(sio, *head, mem.led)) {
+    HAL_GPIO_WritePin(LED_GPIO_Port, LED_Pin, mem.led);
+  }
 }
 void my_before(void* softio, SoftIO_Head_t* head) {
   if (head->type == SOFTIO_HEAD_TYPE_READ) {

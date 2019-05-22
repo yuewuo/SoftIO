@@ -60,3 +60,4 @@ To program the device, you also need a ST-LinkV2 programmer which is also about 
 After compile the project with Keil (or using CubeMX to generate project with other toolchains like gcc) and flash it, you could play with it! The demo project features 8bit GPIO input and 8bit GPIO output, UART×2, SPI(master)×1, PWM×2, ADC×2 and one LED.
 
 ![](SoftF103-MCU/pin.png)
+
