@@ -10,21 +10,23 @@ I developed several MCU project before I realized the necessity of a framework t
 1. read/write data
 2. read/write stream
 
-For example, PC may want to write data to MCU to set the DAC value, and even MCU may want to write to PC if something happened (just like interrupt). With simple read and write, one could realize most of things, however, may not suitable for high-load systems. The point is that, if you want to read ADC data at about 4Mbps but the overall throughput is limited to 6Mbps, that would be a hard problem to solve, which really occurs to me when I was developing a customized SDR (Software-Defined Radio) device on visible light communication. The continuity and packet-loss-free requirement leads to the special design of stream I/O, which exactly reach the high-load requirement above.
+For example, PC may want to write data to MCU to set the DAC value, and even MCU may want to write to PC if something happened (just like interrupt). With simple read and write, one could realize most of things, however, may not suitable for high-load systems. The point is that, if you want to read ADC data at about 4Mbps but the overall throughput is limited to 6Mbps, that would be a hard problem to solve, which really occurs to me when I was developing a customized SDR (Software-Defined Radio) device on visible light communication. The continuity and high reliability requirement leads to the special design of stream I/O, which exactly reach the high-load requirement above.
 
-In my experience, developing a MCU program is annoying with long waiting of compiling, flashing, debugging. SDR inspired my that for a research project, a flexible configuration is much more valuable than compact design of MCU system. For example, although you may not want to change the timer frequency now, it would be great if you could change it only modify the program on PC, without recompiling the firmware and flashing it (possibly even debug new program). It concludes as below:
+In my experience, developing a MCU program is annoying with long waiting of compiling, flashing, debugging. SDR inspired me that for a research project, a flexible configuration is much more valuable than compact design of MCU system. For example, although you may not want to change the timer frequency now, it would be great if you could change it only modify the program on PC, without recompiling the firmware and flashing it (possibly even debug new program). It concludes as below:
 
 > Every parameter should be adjustable outside MCU, at least those needed
+>
+> People without MCU development skills would use the simple API easily to control a MCU on PC
 
 ### 2. why memory synchronization?
 
 Then how to control? For a beginner, a string parser would be easy to implement using `sscanf` on MCU, however, suffered poor performance. Others would like to use or design packet structure and decode them at MCU side, which leads to difficulty in developing and debugging. Actually I did try those methods and finally I came up with the idea of `memory synchronization`. 
 
-For most use case, data and I/O are asynchronous, which means you may not read ADC data exactly when MCU receive your read request, but often in a fixed time interval. When you read ADC in timer interrupt, you don't know whether to throw away the data or give it to a previous read request, just save it somewhere in memory. In this condition, a memory synchronization would work if PC request to sync the data from MCU to PC, then PC would have a copy of the variable in MCU memory. It works perfectly for most of time, MCU would ignore the existing of PC, just do its own work of writing data to specific variable in memory. Then, I want to say, even those procedure call would be realized by the memory synchronization scheme, by adding hook functions for read and write. Assuming that MCU would write to GPIO when PC requests, it simply add a hook function that modify the GPIO register when the write request satisfy some requirements, e.g. exactly writing to a specific address.
+For most use case, data and I/O are asynchronous, which means you may not read ADC data exactly when MCU receive your read request, but often in a fixed time interval. When you read ADC in timer interrupt, you don't know whether to throw away the data or give it to a previous read request, just save it somewhere in memory. In this condition, a memory synchronization would work if PC request to sync the data from MCU to PC, then PC would have a copy of the variable in MCU memory. It works perfectly for most of time, MCU would **ignore** the existing of PC, just do its own work of writing data to specific variable in memory. Then, I want to say, even those procedure call would be realized by the memory synchronization scheme, by adding hook functions for read and write. Assuming that MCU would write to GPIO when PC requests, it simply add a hook function that modify the GPIO register when the write request satisfy some requirements, e.g. exactly writing to a specific address.
 
 ### 3. packet structure
 
-A library would not assume the data structure of memory space, like what variable are there and where are them. The library simply took the share data memory which could be represented by the starting address and the length. Assuming the maximum space of data is 1MB (this is large enough for most MCUs, even the highest-performance MCU of STM: STM32H7xx, only 1MB RAM totally), the head of a packet is a 4 byte control word, shown below, followed by data and 8bit checksum (for write operations).
+A library would not assume the data structure of memory space, like what variable are there and where are them. The library simply took the share data memory which could be represented by the starting address and the length. Assuming the maximum space of data is 1MB (this is large enough for most MCUs, even the highest-performance MCU of STM till now: STM32H7xx, 1MB RAM totally), the head of a packet is a 4 byte control word, shown below, followed by data and 8bit checksum (for write operations).
 
 ```
 |---- byte 0 ---| |---- byte 1 ---| |---- byte 2 ---| |---- byte 3 ---|
@@ -45,9 +47,9 @@ the possible `type` fields are:
 
 ## Usage——get started!
 
-Despite all the design above, you should be able to write and read MCU memory using SoftIO library. We provide a demo on STM32F103C8T6 which costs only $5 on amazon.
+Despite all the design above, you should be able to simply write and read MCU memory using SoftIO library. We provide a demo on STM32F103C8T6 which costs only $5 on amazon.
 
-![](stm32f103c8t6.jpg)
+![stm32f103c8t6.jpg](stm32f103c8t6.jpg)
 
 STM32F103C8T6 features a internal USB full-speed controller, a 72MHz Cortex-M3 core, 64KB Flash memory, 20KB RAM size and lots of peripherals. The USB controller could be configured as CDC (communication device class) which usually show as a serial port on PC.
 
