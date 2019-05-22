@@ -48,9 +48,12 @@ typedef struct {
 	uint16_t adc1;
 	uint16_t adc2;
 
+// GPIO functions
+	uint8_t gpio_out;  // write to this variable will immediately update GPIO value of PB0 ~ PB7
+	uint8_t gpio_in;  // read PB8 ~ PB15
+
 // previous statistics
 	uint16_t siorx_overflow;
-	uint16_t siotx_overflow;
 
 	char siorx_buf[1024];
 	char siotx_buf[1024];
@@ -87,7 +90,7 @@ extern SoftIO_t sio;
  */
 #ifdef MEM_INITIATOR
 #undef MEM_INITIATOR
-void memory_init_user_code_begin_init(void) {
+void memory_init_user_code_begin_sys_init(void) {
 	mem.status = STATUS_INIT;  // host could read this status word, change to STATUS_IDLE when init successs
     mem.version = MCU_VERSION;
     mem.pid = MCU_PID;

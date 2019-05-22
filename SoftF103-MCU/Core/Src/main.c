@@ -88,14 +88,14 @@ int main(void)
   HAL_Init();
 
   /* USER CODE BEGIN Init */
-  memory_init_user_code_begin_init();
+
   /* USER CODE END Init */
 
   /* Configure the system clock */
   SystemClock_Config();
 
   /* USER CODE BEGIN SysInit */
-
+  memory_init_user_code_begin_sys_init();
   /* USER CODE END SysInit */
 
   /* Initialize all configured peripherals */
@@ -109,7 +109,15 @@ int main(void)
   MX_USART1_UART_Init();
   MX_USART2_UART_Init();
   /* USER CODE BEGIN 2 */
-
+  SPI1->CR2 |= SPI_CR2_TXEIE;  // enable tx empty interrupt
+  SPI1->CR2 |= SPI_CR2_RXNEIE;  // enable rx not empty interrupt
+  SPI1->CR1 |= SPI_CR1_SPE;  // enable peripheral
+  USART1->CR1 |= USART_CR1_TXEIE;  // enable tx empty interrupt
+  USART1->CR1 |= USART_CR1_RXNEIE;  // enable rx not empty interrupt
+  USART1->CR1 |= USART_CR1_UE;  // enable peripheral
+  USART2->CR1 |= USART_CR1_TXEIE;  // enable tx empty interrupt
+  USART2->CR1 |= USART_CR1_RXNEIE;  // enable rx not empty interrupt
+  USART2->CR1 |= USART_CR1_UE;  // enable peripheral
   /* USER CODE END 2 */
 
   /* Infinite loop */

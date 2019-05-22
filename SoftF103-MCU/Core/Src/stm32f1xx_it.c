@@ -220,11 +220,19 @@ void USB_LP_CAN1_RX0_IRQHandler(void)
 void SPI1_IRQHandler(void)
 {
   /* USER CODE BEGIN SPI1_IRQn 0 */
+  if (SPI1->SR & SPI_SR_TXE) {
+    // write SPI1->DR to send next byte
+    // if no more to send, close the interrupt
+    SPI1->CR2 &= ~SPI_CR2_TXEIE;  // disable tx empty interrupt
+  }
+  if (SPI1->SR & SPI_SR_RXNE) {
 
+  }
+#if 0
   /* USER CODE END SPI1_IRQn 0 */
   HAL_SPI_IRQHandler(&hspi1);
   /* USER CODE BEGIN SPI1_IRQn 1 */
-
+#endif
   /* USER CODE END SPI1_IRQn 1 */
 }
 
@@ -234,11 +242,19 @@ void SPI1_IRQHandler(void)
 void USART1_IRQHandler(void)
 {
   /* USER CODE BEGIN USART1_IRQn 0 */
-
+  if (USART1->SR & USART_SR_TXE) {  // transmit done, need to fetch from fifo?
+    // write USART1->DR to send next byte
+    // if no more to send, close the interrupt
+    USART1->CR1 &= ~USART_CR1_TXEIE;  // disable tx empty interrupt
+	}
+  if (USART1->SR & USART_SR_RXNE) {  // receive message here
+    // data is in USART1->DR
+  }
+#if 0  // bypass redundant HAL lib
   /* USER CODE END USART1_IRQn 0 */
   HAL_UART_IRQHandler(&huart1);
   /* USER CODE BEGIN USART1_IRQn 1 */
-
+#endif
   /* USER CODE END USART1_IRQn 1 */
 }
 
@@ -248,11 +264,17 @@ void USART1_IRQHandler(void)
 void USART2_IRQHandler(void)
 {
   /* USER CODE BEGIN USART2_IRQn 0 */
-
+  if (USART2->SR & USART_SR_TXE) {  // transmit done, need to fetch from fifo?
+    // write USART2->DR to send next byte
+	}
+  if (USART2->SR & USART_SR_RXNE) {  // receive message here
+    // data is in USART2->DR
+  }
+#if 0  // bypass redundant HAL lib
   /* USER CODE END USART2_IRQn 0 */
   HAL_UART_IRQHandler(&huart2);
   /* USER CODE BEGIN USART2_IRQn 1 */
-
+#endif
   /* USER CODE END USART2_IRQn 1 */
 }
 
