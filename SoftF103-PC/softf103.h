@@ -49,6 +49,9 @@ typedef struct {
 // GPIO functions
 	uint8_t gpio_out;  // write to this variable will immediately update GPIO value of PB0 ~ PB7
 	uint8_t gpio_in;  // read PB8 ~ PB15
+	uint32_t gpio_count_add;  // write to atomically add to gpio_count
+	uint32_t gpio_count;  // for data streaming, provide the count of samples. only timer 1 interrupt is valid, and using fifo0
+	uint32_t gpio_underflow;  // record underflow count for sanity check
 
 // read adc value immediately
 	uint16_t adc1;
@@ -56,6 +59,8 @@ typedef struct {
 
 // LED functions
 	uint8_t led;  // write 1 to open the LED and write 0 to close. only the LSB is used
+	uint8_t recv_led_1;
+	uint16_t recv_led_2;
 
 // Timers
 	uint8_t tim1_PWM;  // write 1 to enable, 0 to disable

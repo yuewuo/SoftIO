@@ -38,6 +38,12 @@ SoftIO_t sio;
 void __aeabi_assert(const char *expr, const char *file, int line) {
   printf("assert failed: %s(%d): %s\n", file, line, expr); while(1);
 }
+int fputc(int ch, FILE *f) {
+  while (fifo_full(&mem.logging));  // wait others to send
+  fifo_enque(&mem.logging, ch);
+  USART2->CR1 |= USART_CR1_TXEIE;  // enable tx empty interrupt
+	return ch;
+}
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -70,9 +76,17 @@ void SystemClock_Config(void);
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
 void my_write_before(void* softio, SoftIO_Head_t* head) {
-  assert(softio && head);
+  uint8_t need_disable_irq = 0;
+  if (softio_is_variable_included(sio, *head, mem.gpio_count)) {  // atomic write
+    need_disable_irq = 1;
+  }
+  if (softio_is_variable_included(sio, *head, mem.gpio_count_add)) {  // atomic write
+    need_disable_irq = 1;
+  }
+  if (need_disable_irq) __disable_irq();
 }
 void my_write_after(void* softio, SoftIO_Head_t* head) {
+  uint8_t need_enable_irq = 0;
   if (softio_is_variable_included(sio, *head, mem.gpio_out)) {
     GPIOB->BSRR = mem.gpio_out | ( ((uint32_t)(~mem.gpio_out & 0x0ff))<<16 );  // atomic write
   }
@@ -118,6 +132,13 @@ void my_write_after(void* softio, SoftIO_Head_t* head) {
       TIM2->DIER &= ~TIM_IT_UPDATE;  // disable interrupt
     }
   }
+  if (softio_is_variable_included(sio, *head, mem.gpio_count)) {  // atomic write
+    need_enable_irq = 1;
+  }
+  if (softio_is_variable_included(sio, *head, mem.gpio_count_add)) {  // atomic write
+    need_enable_irq = 1;
+  }
+  if (need_enable_irq) __enable_irq();
 }
 void my_before(void* softio, SoftIO_Head_t* head) {
   if (head->type == SOFTIO_HEAD_TYPE_READ) {
@@ -173,6 +194,8 @@ int main(void)
   MX_USART1_UART_Init();
   MX_USART2_UART_Init();
   /* USER CODE BEGIN 2 */
+	print_info("SoftF103 on STM32F103C8T6, version 0x%08x, pid 0x%04X, compiled at %s, %s", mem.version, mem.pid, __TIME__, __DATE__);
+	print_debug("mem size=%u, check this with your host to ensure struct correctness", sizeof(mem));
   SPI1->CR2 |= SPI_CR2_TXEIE;  // enable tx empty interrupt
   SPI1->CR2 |= SPI_CR2_RXNEIE;  // enable rx not empty interrupt
   SPI1->CR1 |= SPI_CR1_SPE;  // enable peripheral

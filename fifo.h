@@ -124,7 +124,7 @@ inline uint32_t fifo_copy_from_buffer(Fifo_t* dest, char* src, uint32_t max_leng
     if (len >= copylen) {  // copy once OK
         memcpy(__fifo_write_base(dest), src, copylen);
     } else {  // need slicing
-        memcpy(__fifo_read_base(dest), src, len);
+        memcpy(__fifo_write_base(dest), src, len);
         memcpy(FIFO_PTR(dest->base), src + len, copylen - len);
     }
     dest->write = (dest->write + copylen) % dest->length;  // set pointer directly

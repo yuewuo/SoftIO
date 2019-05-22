@@ -23,6 +23,8 @@
 #include "stm32f1xx_it.h"
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
+#define EXTERN_MEM
+#include "softf103.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -222,7 +224,18 @@ void USB_LP_CAN1_RX0_IRQHandler(void)
 void TIM1_UP_IRQHandler(void)
 {
   /* USER CODE BEGIN TIM1_UP_IRQn 0 */
-  TIM1->SR = ~TIM_IT_UPDATE;
+  if (TIM1->SR & TIM_IT_UPDATE) {
+    TIM1->SR = ~TIM_IT_UPDATE;
+    if (mem.gpio_count) {
+      --mem.gpio_count;
+      if (fifo_empty(&mem.fifo0)) {
+        ++mem.gpio_underflow;
+      } else {
+        uint8_t tmp = fifo_deque(&mem.fifo0);
+        GPIOB->BSRR = tmp | ( ((uint32_t)(~tmp & 0x0ff))<<16 );  // atomic write
+      }
+    }
+  }
 #if 0
   /* USER CODE END TIM1_UP_IRQn 0 */
   HAL_TIM_IRQHandler(&htim1);
@@ -237,7 +250,9 @@ void TIM1_UP_IRQHandler(void)
 void TIM2_IRQHandler(void)
 {
   /* USER CODE BEGIN TIM2_IRQn 0 */
-  TIM2->SR = ~TIM_IT_UPDATE;
+  if (TIM2->SR & TIM_IT_UPDATE) {
+    TIM2->SR = ~TIM_IT_UPDATE;
+  }
 #if 0
   /* USER CODE END TIM2_IRQn 0 */
   HAL_TIM_IRQHandler(&htim2);
@@ -297,9 +312,13 @@ void USART2_IRQHandler(void)
 {
   /* USER CODE BEGIN USART2_IRQn 0 */
   if (USART2->SR & USART_SR_TXE) {  // transmit done, need to fetch from fifo?
-    // write USART2->DR to send next byte
-    // if no more to send, close the interrupt
-    USART2->CR1 &= ~USART_CR1_TXEIE;  // disable tx empty interrupt
+    if (!fifo_empty(&mem.logging)) {
+      // write USART2->DR to send next byte
+      USART2->DR = fifo_deque(&mem.logging);
+    } else {
+      // if no more to send, close the interrupt
+      USART2->CR1 &= ~USART_CR1_TXEIE;  // disable tx empty interrupt
+    }
 	}
   if (USART2->SR & USART_SR_RXNE) {  // receive message here
     // data is in USART2->DR
