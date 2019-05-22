@@ -79,6 +79,45 @@ void my_write_after(void* softio, SoftIO_Head_t* head) {
   if (softio_is_variable_included(sio, *head, mem.led)) {
     HAL_GPIO_WritePin(LED_GPIO_Port, LED_Pin, mem.led);
   }
+  if (softio_is_variable_included(sio, *head, mem.tim1_prescaler)) TIM1->PSC = mem.tim1_prescaler;
+  if (softio_is_variable_included(sio, *head, mem.tim1_period)) TIM1->ARR = mem.tim1_period;
+  if (softio_is_variable_included(sio, *head, mem.tim1_pulse)) TIM1->CCR1 = mem.tim1_pulse;
+  if (softio_is_variable_included(sio, *head, mem.tim1_PWM)) {
+    if (mem.tim1_PWM) {
+      TIM1->CCER |= (uint32_t)(TIM_CCx_ENABLE << TIM_CHANNEL_1);  // enable pwm1
+      TIM1->BDTR |= TIM_BDTR_MOE;  // only TIM1 needs this
+      TIM1->CR1 |= TIM_CR1_CEN;  // enable peripheral
+    } else {
+      TIM1->CCER &= ~(uint32_t)(TIM_CCx_ENABLE << TIM_CHANNEL_1);  // disable pwm1
+    }
+  }
+  if (softio_is_variable_included(sio, *head, mem.tim1_IT)) {
+    if (mem.tim1_IT) {
+      TIM1->DIER |= TIM_IT_UPDATE;  // enable interrupt
+      TIM1->CR1 |= TIM_CR1_CEN;  // enable peripheral
+    } else {
+      TIM1->DIER &= ~TIM_IT_UPDATE;  // disable interrupt
+    }
+  }
+  if (softio_is_variable_included(sio, *head, mem.tim2_prescaler)) TIM2->PSC = mem.tim2_prescaler;
+  if (softio_is_variable_included(sio, *head, mem.tim2_period)) TIM2->ARR = mem.tim2_period;
+  if (softio_is_variable_included(sio, *head, mem.tim2_pulse)) TIM2->CCR1 = mem.tim2_pulse;
+  if (softio_is_variable_included(sio, *head, mem.tim2_PWM)) {
+    if (mem.tim2_PWM) {
+      TIM2->CCER |= (uint32_t)(TIM_CCx_ENABLE << TIM_CHANNEL_1);  // enable pwm1
+      TIM2->CR1 |= TIM_CR1_CEN;  // enable peripheral
+    } else {
+      TIM2->CCER &= ~(uint32_t)(TIM_CCx_ENABLE << TIM_CHANNEL_1);  // disable pwm1
+    }
+  }
+  if (softio_is_variable_included(sio, *head, mem.tim2_IT)) {
+    if (mem.tim2_IT) {
+      TIM2->DIER |= TIM_IT_UPDATE;  // enable interrupt
+      TIM2->CR1 |= TIM_CR1_CEN;  // enable peripheral
+    } else {
+      TIM2->DIER &= ~TIM_IT_UPDATE;  // disable interrupt
+    }
+  }
 }
 void my_before(void* softio, SoftIO_Head_t* head) {
   if (head->type == SOFTIO_HEAD_TYPE_READ) {

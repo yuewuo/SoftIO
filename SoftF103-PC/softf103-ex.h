@@ -30,6 +30,9 @@ struct SoftF103Host_t {
 	void GPIO_write(uint8_t output);
 	uint8_t GPIO_read();
 	void LED_set(bool opened);
+// Timer control: timer = 1 or 2
+	pair<float, float> Timer_Start_PWM(int timer, float frequency, float duty);
+	float Timer_Start_IT(int timer, float frequency);
 };
 
 #ifdef SOFTF103HOST_IMPLEMENTATION
@@ -136,6 +139,59 @@ void SoftF103Host_t::LED_set(bool opened) {
 	mem.led = opened;
 	softio_blocking(write, sio, mem.led);
 	lock.unlock();
+}
+
+pair<float, float> SoftF103Host_t::Timer_Start_PWM(int timer, float frequency, float duty) {
+	assert((timer == 1 || timer == 2) && "invalid timer number");
+	const float clock = 72e6;
+	float period_target = clock / frequency - 0.5;
+	assert(period_target >= 0 && period_target < 65536 && "invalid frequency");  // TODO: set prescaler to support lower frequency
+	uint16_t period = period_target;
+	float frequency_real = clock / ((float)period + 1);
+	float pulse_target = clock / frequency_real * duty - 0.5;
+	uint16_t pulse = pulse_target;
+	float duty_real = frequency_real / clock * ((float)pulse + 1);
+	lock.lock();
+	if (timer == 1) {
+		mem.tim1_prescaler = 0;
+		mem.tim1_period = period;
+		mem.tim1_pulse = pulse;
+		softio_blocking(write_between, sio, mem.tim1_prescaler, mem.tim1_pulse);
+		mem.tim1_PWM = 1;
+		softio_blocking(write, sio, mem.tim1_PWM);
+	} else {
+		mem.tim2_prescaler = 0;
+		mem.tim2_period = period;
+		mem.tim2_pulse = pulse;
+		softio_blocking(write_between, sio, mem.tim2_prescaler, mem.tim2_pulse);
+		mem.tim2_PWM = 1;
+		softio_blocking(write, sio, mem.tim2_PWM);
+	}
+	lock.unlock();
+	return make_pair(frequency_real, duty_real);
+}
+
+float SoftF103Host_t::Timer_Start_IT(int timer, float frequency) {
+	assert((timer == 1 || timer == 2) && "invalid timer number");
+	const float clock = 72e6;
+	float period_target = clock / frequency - 0.5;
+	assert(period_target >= 0 && period_target <= 65536 && "invalid frequency");  // TODO: set prescaler to support lower frequency
+	uint32_t period = period_target;
+	float frequency_real = clock / period;
+	lock.lock();
+	if (timer == 1) {
+		mem.tim1_period = period;
+		softio_blocking(write, sio, mem.tim1_period);
+		mem.tim1_IT = 1;
+		softio_blocking(write, sio, mem.tim1_IT);
+	} else {
+		mem.tim2_period = period;
+		softio_blocking(write, sio, mem.tim2_period);
+		mem.tim2_IT = 1;
+		softio_blocking(write, sio, mem.tim2_IT);
+	}
+	lock.unlock();
+	return frequency_real;
 }
 
 #endif

@@ -57,6 +57,19 @@ typedef struct {
 // LED functions
 	uint8_t led;  // write 1 to open the LED and write 0 to close. only the LSB is used
 
+// Timers
+	uint8_t tim1_PWM;  // write 1 to enable, 0 to disable
+	uint8_t tim1_IT;  // write 1 to enable, 0 to disable
+	uint16_t tim1_prescaler;
+	uint16_t tim1_period;
+	uint16_t tim1_pulse;
+
+	uint8_t tim2_PWM;  // write 1 to enable, 0 to disable
+	uint8_t tim2_IT;  // write 1 to enable, 0 to disable
+	uint16_t tim2_prescaler;
+	uint16_t tim2_period;
+	uint16_t tim2_pulse;
+
 	char siorx_buf[1024];
 	char siotx_buf[1024];
 	char logging_buf[512];  // debug informations here
