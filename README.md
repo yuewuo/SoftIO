@@ -54,3 +54,7 @@ Despite all the design above, you should be able to simply write and read MCU me
 STM32F103C8T6 features a internal USB full-speed controller, a 72MHz Cortex-M3 core, 64KB Flash memory, 20KB RAM size and lots of peripherals. The USB controller could be configured as CDC (communication device class) which usually show as a serial port on PC.
 
 To program the device, you also need a ST-LinkV2 programmer which is also about $5 (you might be surprise that ST-LinkV2 is just a STM32F103C8T6 chip!), and connect it to the right side 4 pin. Note that with the USB cable connected (left in the picture), you should disconnect VCC in the right side, connecting only GND, SWDIO and SWCLK.
+
+After compile the project with Keil (or using CubeMX to generate project with other toolchains like gcc) and flash it, you could play with it! The demo project features 8bit GPIO input and 8bit GPIO output, UART×2, SPI(master)×1, PWM×2, ADC×2 and one LED.
+
+![](SoftF103-MCU/pin.png)
