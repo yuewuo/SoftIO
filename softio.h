@@ -23,6 +23,11 @@
 	softio_try_handle_all(softio); \
 } while (0)
 #define softio_buffered_count(softio) (((softio).write - (softio).read + (softio).length) % (softio).length)
+// call below when waiting for packets
+#define softio_flush_try_handle_all(softio) do { \
+	softio_flush(softio); \
+	softio_try_handle_all(softio); \
+} while(0)
 
 // utility functions
 #define softio_is_variable_included(softio, head, var) ((head).addr<=((char*)&(var)-softio.base) && (head).addr+(head).length>=((char*)&(var)+sizeof(var)-softio.base))
@@ -95,10 +100,6 @@ typedef struct {
 // check function: you can define the restricted area of operation or anything else you like
 // you can even redirect read/write by set the addr in head!
 	void (*before) (void* softio, SoftIO_Head_t* head);
-// write_before function: there might be race condition when write to variables, use this hook function to disable irq
-	void (*write_before) (void* softio, SoftIO_Head_t* head);
-// write_after function: you may recover irq here
-	void (*write_after) (void* softio, SoftIO_Head_t* head);
 // after function: you can process something after host read/write some memory from/to you
 	void (*after) (void* softio, SoftIO_Head_t* head);
 // callback function: read/write request fininsh callback
@@ -115,8 +116,6 @@ typedef struct {
 	void (*yield) ();
 #else
 	std::function<void(void*, SoftIO_Head_t*)> before;
-	std::function<void(void*, SoftIO_Head_t*)> write_before;
-	std::function<void(void*, SoftIO_Head_t*)> write_after;
 	std::function<void(void*, SoftIO_Head_t*)> after;
 	std::function<void(void*, SoftIO_Head_t*)> callback;
 	std::function<size_t()> available;
@@ -142,8 +141,6 @@ static inline void softio_init(SoftIO_t* softio, void* base, uint32_t size, Fifo
 	softio->fifo_begin = (char*)rx - (char*)base;
 	softio->fifo_end = size;
 	softio->before = NULL;
-	softio->write_before = NULL;
-	softio->write_after = NULL;
 	softio->after = NULL;
 	softio->callback = NULL;
 	softio->gets = NULL;
@@ -223,7 +220,6 @@ static inline int __softio_try_handle_one(SoftIO_t* softio) {
 		if (softio->callback) softio->callback(softio, rptr);
 		softio->read = (softio->read + 1) % softio->length;  // delete this transaction
 	} else {  // request
-		if (softio->before) softio->before(softio, &head);
 		switch (type) {
 		case SOFTIO_HEAD_TYPE_READ:
 			SOFTIO_HANDLE_NEED_READ(4);  // length not ready
@@ -232,6 +228,7 @@ static inline int __softio_try_handle_one(SoftIO_t* softio) {
 			assert((uint32_t)(head.addr + head.length) <= softio->size && "read outside shared space");
 			SOFTIO_HANDLE_NEED_WRITE((uint32_t)(3 + head.length));  // fifo is not ready for reply
 			__softio_head_deque(softio->rx, &head);  // really get head
+			if (softio->before) softio->before(softio, &head);
 			fifo_enque(softio->tx, (SOFTIO_HEAD_TYPE_READ | 0x01));
 			fifo_enque(softio->tx, head.length);
 			sum=0; for (uint32_t i=0; i<head.length; ++i) {
@@ -248,14 +245,13 @@ static inline int __softio_try_handle_one(SoftIO_t* softio) {
 			SOFTIO_HANDLE_NEED_READ((uint32_t)(4 + head.length + 1));  // data not ready
 			SOFTIO_HANDLE_NEED_WRITE(2);  // fifo is not ready for reply
 			__softio_head_deque(softio->rx, &head);  // really get head
-			if (softio->write_before) softio->write_before(softio, &head);
+			if (softio->before) softio->before(softio, &head);
 			sum=0; for (uint32_t i=0; i<(uint32_t)(head.length + 1); ++i) {  // including checksum
 				sum += fifo_preread(softio->rx, i);
 			} assert(sum == 0 && "check sum failed for write");
 			for (uint32_t i=0; i<head.length; ++i) {  // actually write into local memory
 				softio->base[head.addr + i] = fifo_deque(softio->rx);
 			} fifo_deque(softio->rx);  // get checksum outside
-			if (softio->write_after) softio->write_after(softio, &head);
 			fifo_enque(softio->tx, (SOFTIO_HEAD_TYPE_WRITE | 0x01));
 			fifo_enque(softio->tx, head.length);
 			break;
@@ -270,6 +266,7 @@ static inline int __softio_try_handle_one(SoftIO_t* softio) {
 			if (fifo_count(fptr) < length) length = fifo_count(fptr);  // only have these
 			SOFTIO_HANDLE_NEED_WRITE((uint32_t)(3 + length));  // fifo is not ready for reply
 			__softio_head_deque(softio->rx, &head);  // really get head
+			if (softio->before) softio->before(softio, &head);
 			fifo_enque(softio->tx, (SOFTIO_HEAD_TYPE_READ_FIFO | 0x01));
 			fifo_enque(softio->tx, length);
 			sum=0; for (uint32_t i=0; i<length; ++i) {
@@ -287,6 +284,7 @@ static inline int __softio_try_handle_one(SoftIO_t* softio) {
 			SOFTIO_HANDLE_NEED_READ((uint32_t)(4 + head.length + 1));  // data not ready
 			SOFTIO_HANDLE_NEED_WRITE(2);  // fifo is not ready for reply
 			__softio_head_deque(softio->rx, &head);  // really get head
+			if (softio->before) softio->before(softio, &head);
 			sum=0; for (uint32_t i=0; i<(uint32_t)(head.length + 1); ++i) {  // including checksum
 				sum += fifo_preread(softio->rx, i);
 			} assert(sum == 0 && "check sum failed for write");
@@ -305,6 +303,7 @@ static inline int __softio_try_handle_one(SoftIO_t* softio) {
 			SOFTIO_HANDLE_NEED_READ(4);  // length not ready
 			SOFTIO_HANDLE_NEED_WRITE(1);  // fifo is not ready for reply
 			__softio_head_deque(softio->rx, &head);  // really get head
+			if (softio->before) softio->before(softio, &head);
 			assert(head.length == 0 && "invalid length, must be 0");
 			assert((uint32_t)head.addr >= softio->fifo_begin && (uint32_t)(head.addr + sizeof(Fifo_t)) <= softio->fifo_end && "write fifo outside valid space");
 			assert((head.addr - softio->fifo_begin) % sizeof(Fifo_t) == 0 && "write fifo alignment error");
@@ -342,7 +341,10 @@ static inline void __softio_gets_fifo_blocking(SoftIO_t* softio, Fifo_t* fifo, s
 	}
 }
 #define softio_flush_fifo(softio, fifo) __softio_puts_fifo_blocking(&(softio), &(fifo), (fifo).length - 1)
-#define softio_flush(softio) softio_flush_fifo(softio, (*(softio).tx))
+#define softio_flush(softio) do { \
+	softio_flush_fifo(softio, (*(softio).tx)); \
+	if ((softio).available) __softio_gets_fifo_blocking(&(softio), (softio).rx, (softio).available()); \
+} while(0)
 static inline void __softio_puts_fifo_blocking(SoftIO_t* softio, Fifo_t* fifo, size_t size) {  // wait for fifo_remain > size
 	assert(fifo->length > size);
 	if (!softio->puts) { while (fifo_count(fifo) < size) if (softio->yield) softio->yield(); }

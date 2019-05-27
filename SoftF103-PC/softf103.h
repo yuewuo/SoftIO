@@ -7,7 +7,7 @@
  */
 
 // MCU_VERSION: uint32_t number, like 0x19052200, be sure to update this number when memory is different from before
-#define MCU_VERSION 0x19052200
+#define MCU_VERSION 0x19052700
 // MCU_PID: uint16_t number, the pid to distinguish different devices, you should modify it, for example:
 #define MCU_PID 0x1234
 

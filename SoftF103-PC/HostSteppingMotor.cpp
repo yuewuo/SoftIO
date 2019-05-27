@@ -26,8 +26,9 @@ SoftF103Host_t f103;
 #define MOTOR_ENA (1<<3) // PB3
 #define MOTOR_PUL (1<<4) // PB4
 #define MOTOR_DIR (1<<5) // PB5
-#define MAX_FREQUENCY 5e3  // 5kHz
-#define MIN_FREQUENCY 100  // 100Hz
+// 160 pulse / mm
+#define MAX_FREQUENCY 16e3  // 8kHz -> 50mm/s
+#define MIN_FREQUENCY 160  // 80Hz -> 0.5mm/s
 
 int motor_min = INT32_MIN;
 int motor_max = INT32_MAX;

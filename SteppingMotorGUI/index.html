@@ -55,7 +55,7 @@
 				<el-button type="success" size="mini" v-on:click="reconnect">reconnect</el-button>
 				<el-button type="danger" size="mini" :disabled="server_id?false:true" v-on:click="shutdown">shutdown{{ shutdown_count ? " (" + shutdown_count + ")" : ""}}</el-button>
 			</p>
-			<p>Speed: <input type="number" min="5" max="100" v-model="speed"/> mm/s (5~100)</p>
+			<p>Speed: <input type="number" min="0.5" max="50" v-model="speed"/> mm/s (0.5~50)</p>
 			<p>
 				<el-button type="danger" v-on:click="motor_move(-100)">-100mm</el-button>
 				<el-button type="warning" v-on:click="motor_move(-10)">-10mm</el-button>
@@ -96,7 +96,7 @@ var app = new Vue({
 		mqtt: null,
 		shutdown_timeout: null,
 		shutdown_count: null,
-		speed: 100,
+		speed: 25,
 		motor_min: 0,
 		motor_now: 0,
 		motor_max: 0,
@@ -131,8 +131,8 @@ var app = new Vue({
 				console.error("server not connected");
 				return;
 			}
-			let count = mm * 20;
-			let frequency = this.speed * 40;
+			let count = mm * 160;
+			let frequency = this.speed * 320;  // 50 -> 16000
 			console.log("move " + mm + "mm (= " + count + " pulse)");
 			mqtt_send(this.server_id + "/move", "" + frequency + " " + count);
 		},
