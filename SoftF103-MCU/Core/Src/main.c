@@ -75,80 +75,81 @@ void SystemClock_Config(void);
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
-void my_write_before(void* softio, SoftIO_Head_t* head) {
-  uint8_t need_disable_irq = 0;
-  if (softio_is_variable_included(sio, *head, mem.gpio_count)) {  // atomic write
-    need_disable_irq = 1;
-  }
-  if (softio_is_variable_included(sio, *head, mem.gpio_count_add)) {  // atomic write
-    need_disable_irq = 1;
-  }
-  if (need_disable_irq) __disable_irq();
-}
-void my_write_after(void* softio, SoftIO_Head_t* head) {
-  uint8_t need_enable_irq = 0;
-  if (softio_is_variable_included(sio, *head, mem.gpio_out)) {
-    GPIOB->BSRR = mem.gpio_out | ( ((uint32_t)(~mem.gpio_out & 0x0ff))<<16 );  // atomic write
-  }
-  if (softio_is_variable_included(sio, *head, mem.led)) {
-    HAL_GPIO_WritePin(LED_GPIO_Port, LED_Pin, mem.led);
-  }
-  if (softio_is_variable_included(sio, *head, mem.tim1_prescaler)) TIM1->PSC = mem.tim1_prescaler;
-  if (softio_is_variable_included(sio, *head, mem.tim1_period)) TIM1->ARR = mem.tim1_period;
-  if (softio_is_variable_included(sio, *head, mem.tim1_pulse)) TIM1->CCR1 = mem.tim1_pulse;
-  if (softio_is_variable_included(sio, *head, mem.tim1_PWM)) {
-    if (mem.tim1_PWM) {
-      TIM1->CCER |= (uint32_t)(TIM_CCx_ENABLE << TIM_CHANNEL_1);  // enable pwm1
-      TIM1->BDTR |= TIM_BDTR_MOE;  // only TIM1 needs this
-      TIM1->CR1 |= TIM_CR1_CEN;  // enable peripheral
-    } else {
-      TIM1->CCER &= ~(uint32_t)(TIM_CCx_ENABLE << TIM_CHANNEL_1);  // disable pwm1
-    }
-  }
-  if (softio_is_variable_included(sio, *head, mem.tim1_IT)) {
-    if (mem.tim1_IT) {
-      TIM1->DIER |= TIM_IT_UPDATE;  // enable interrupt
-      TIM1->CR1 |= TIM_CR1_CEN;  // enable peripheral
-    } else {
-      TIM1->DIER &= ~TIM_IT_UPDATE;  // disable interrupt
-    }
-  }
-  if (softio_is_variable_included(sio, *head, mem.tim2_prescaler)) TIM2->PSC = mem.tim2_prescaler;
-  if (softio_is_variable_included(sio, *head, mem.tim2_period)) TIM2->ARR = mem.tim2_period;
-  if (softio_is_variable_included(sio, *head, mem.tim2_pulse)) TIM2->CCR1 = mem.tim2_pulse;
-  if (softio_is_variable_included(sio, *head, mem.tim2_PWM)) {
-    if (mem.tim2_PWM) {
-      TIM2->CCER |= (uint32_t)(TIM_CCx_ENABLE << TIM_CHANNEL_1);  // enable pwm1
-      TIM2->CR1 |= TIM_CR1_CEN;  // enable peripheral
-    } else {
-      TIM2->CCER &= ~(uint32_t)(TIM_CCx_ENABLE << TIM_CHANNEL_1);  // disable pwm1
-    }
-  }
-  if (softio_is_variable_included(sio, *head, mem.tim2_IT)) {
-    if (mem.tim2_IT) {
-      TIM2->DIER |= TIM_IT_UPDATE;  // enable interrupt
-      TIM2->CR1 |= TIM_CR1_CEN;  // enable peripheral
-    } else {
-      TIM2->DIER &= ~TIM_IT_UPDATE;  // disable interrupt
-    }
-  }
-  if (softio_is_variable_included(sio, *head, mem.gpio_count)) {  // atomic write
-    need_enable_irq = 1;
-  }
-  if (softio_is_variable_included(sio, *head, mem.gpio_count_add)) {  // atomic write
-    need_enable_irq = 1;
-  }
-  if (need_enable_irq) __enable_irq();
-}
 void my_before(void* softio, SoftIO_Head_t* head) {
+  uint8_t need_disable_irq = 0;
+  if (head->type == SOFTIO_HEAD_TYPE_READ || head->type == SOFTIO_HEAD_TYPE_WRITE) {
+    if (softio_is_variable_included(sio, *head, mem.gpio_count)) {  // atomic write
+      need_disable_irq = 1;
+    }
+    if (softio_is_variable_included(sio, *head, mem.gpio_count_add)) {  // atomic write
+      need_disable_irq = 1;
+    }
+  }
   if (head->type == SOFTIO_HEAD_TYPE_READ) {
     if (softio_is_variable_included(sio, *head, mem.gpio_in)) {  // wanna read variable
       mem.gpio_in = GPIOB->IDR >> 8;  // PB15 ~ PB8
     }
   }
+  if (need_disable_irq) __disable_irq();
 }
 void my_after(void* softio, SoftIO_Head_t* head) {
-  assert(softio && head);
+  uint8_t need_enable_irq = 0;
+  if (head->type == SOFTIO_HEAD_TYPE_WRITE) {
+    if (softio_is_variable_included(sio, *head, mem.gpio_out)) {
+      GPIOB->BSRR = mem.gpio_out | ( ((uint32_t)(~mem.gpio_out & 0x0ff))<<16 );  // atomic write
+    }
+    if (softio_is_variable_included(sio, *head, mem.led)) {
+      HAL_GPIO_WritePin(LED_GPIO_Port, LED_Pin, mem.led);
+    }
+    if (softio_is_variable_included(sio, *head, mem.tim1_prescaler)) TIM1->PSC = mem.tim1_prescaler;
+    if (softio_is_variable_included(sio, *head, mem.tim1_period)) TIM1->ARR = mem.tim1_period;
+    if (softio_is_variable_included(sio, *head, mem.tim1_pulse)) TIM1->CCR1 = mem.tim1_pulse;
+    if (softio_is_variable_included(sio, *head, mem.tim1_PWM)) {
+      if (mem.tim1_PWM) {
+        TIM1->CCER |= (uint32_t)(TIM_CCx_ENABLE << TIM_CHANNEL_1);  // enable pwm1
+        TIM1->BDTR |= TIM_BDTR_MOE;  // only TIM1 needs this
+        TIM1->CR1 |= TIM_CR1_CEN;  // enable peripheral
+      } else {
+        TIM1->CCER &= ~(uint32_t)(TIM_CCx_ENABLE << TIM_CHANNEL_1);  // disable pwm1
+      }
+    }
+    if (softio_is_variable_included(sio, *head, mem.tim1_IT)) {
+      if (mem.tim1_IT) {
+        TIM1->DIER |= TIM_IT_UPDATE;  // enable interrupt
+        TIM1->CR1 |= TIM_CR1_CEN;  // enable peripheral
+      } else {
+        TIM1->DIER &= ~TIM_IT_UPDATE;  // disable interrupt
+      }
+    }
+    if (softio_is_variable_included(sio, *head, mem.tim2_prescaler)) TIM2->PSC = mem.tim2_prescaler;
+    if (softio_is_variable_included(sio, *head, mem.tim2_period)) TIM2->ARR = mem.tim2_period;
+    if (softio_is_variable_included(sio, *head, mem.tim2_pulse)) TIM2->CCR1 = mem.tim2_pulse;
+    if (softio_is_variable_included(sio, *head, mem.tim2_PWM)) {
+      if (mem.tim2_PWM) {
+        TIM2->CCER |= (uint32_t)(TIM_CCx_ENABLE << TIM_CHANNEL_1);  // enable pwm1
+        TIM2->CR1 |= TIM_CR1_CEN;  // enable peripheral
+      } else {
+        TIM2->CCER &= ~(uint32_t)(TIM_CCx_ENABLE << TIM_CHANNEL_1);  // disable pwm1
+      }
+    }
+    if (softio_is_variable_included(sio, *head, mem.tim2_IT)) {
+      if (mem.tim2_IT) {
+        TIM2->DIER |= TIM_IT_UPDATE;  // enable interrupt
+        TIM2->CR1 |= TIM_CR1_CEN;  // enable peripheral
+      } else {
+        TIM2->DIER &= ~TIM_IT_UPDATE;  // disable interrupt
+      }
+    }
+  }
+  if (head->type == SOFTIO_HEAD_TYPE_READ || head->type == SOFTIO_HEAD_TYPE_WRITE) {
+    if (softio_is_variable_included(sio, *head, mem.gpio_count)) {  // atomic write
+      need_enable_irq = 1;
+    }
+    if (softio_is_variable_included(sio, *head, mem.gpio_count_add)) {  // atomic write
+      need_enable_irq = 1;
+    }
+  }
+  if (need_enable_irq) __enable_irq();
 }
 /* USER CODE END 0 */
 
@@ -177,8 +178,6 @@ int main(void)
 
   /* USER CODE BEGIN SysInit */
   memory_init_user_code_begin_sys_init();
-  sio.write_before = my_write_before;
-	sio.write_after = my_write_after;
   sio.before = my_before;
 	sio.after = my_after;
   /* USER CODE END SysInit */
