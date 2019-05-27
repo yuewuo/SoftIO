@@ -3,7 +3,7 @@ project(SoftF103-PC C CXX ASM)
 
 set(CMAKE_BUILD_TYPE Debug)
 # set(CMAKE_BUILD_TYPE Release)
-set(CMAKE_CXX_STANDARD 11)
+set(CMAKE_CXX_STANDARD 17)
 
 set(CMAKE_CXX_FLAGS_DEBUG "-g -Wall -Wextra -Wshadow -O2 -pg")
 set(CMAKE_CXX_FLAGS_RELEASE "-O3 -funroll-loops -Wall -Wextra -Wshadow")
@@ -17,7 +17,7 @@ macro (Link _name)
 		elseif (WIN32)
 			target_link_libraries(${_name} setupapi hid uuid)
 		endif()
-		target_link_libraries(${_name} pthread)
+		target_link_libraries(${_name} pthread mosquitto)
 	endif()
 endmacro()
 

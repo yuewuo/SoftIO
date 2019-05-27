@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<meta http-equiv="X-UA-Compatible" content="ie=edge">
+	<link rel="shortcut icon" href="favicon.png">
+	<title>SteppingMotor</title>
+	<link rel="stylesheet" href="element.css">
+	<style>
+	body, html {
+		height: 100%;
+		width: 100%;
+		margin: 0;
+		padding: 0;
+	}
+	#app, #ifs{
+		height: 100%;
+		width: 100%;
+		margin: 0;
+		padding: 0;
+		text-align: center;
+		display: table;
+	}
+	#app .inner {
+		display: table-cell;
+		vertical-align: middle;
+		font-weight: bold;
+	}
+	#ifs {
+		background-color: white;
+	}
+	.if {
+		position: absolute;
+		top: 0;
+		left: 0;
+		width: 100%;
+		height: 100%;
+		margin: 0;
+		padding: 0;
+		border: 0;
+	}
+	</style>
+</head>
+	<div id="app">
+		<div class="inner">
+			<p style="font-size: 200%; ">SteppingMotor WebGUI</p>
+			<p style="color: grey;">WebSocket Connection [ <strong style="color: black;" title="set 'host' and 'port' in GET parameters">
+				{{ mqtt_host }}:{{ mqtt_port }}</strong> ]: 
+				<strong v-bind:style="{ color: mqtt_connected ? 'green' : 'red' }">{{ mqtt_status }}</strong></p>
+			<code style="color: peru;">ClientID: <strong style="color: black;">{{ mqtt_clientid }}</strong>, 
+				SteppingMotor Host: <strong style="color: black;">{{ server_id ? server_id : "null" }}</strong>
+				[ {{ server_version ? server_version : "null" }} ]</code>
+			<p>
+				<el-button type="success" size="mini" v-on:click="reconnect">reconnect</el-button>
+				<el-button type="danger" size="mini" :disabled="server_id?false:true" v-on:click="shutdown">shutdown{{ shutdown_count ? " (" + shutdown_count + ")" : ""}}</el-button>
+			</p>
+			<p>Speed: <input type="number" min="5" max="100" v-model="speed"/> mm/s (5~100)</p>
+			<p>
+				<el-button type="danger" v-on:click="motor_move(-100)">-100mm</el-button>
+				<el-button type="warning" v-on:click="motor_move(-10)">-10mm</el-button>
+				<el-button type="success" v-on:click="motor_move(-1)">-1mm</el-button>
+				<el-button type="success" v-on:click="motor_move(1)">+1mm</el-button>
+				<el-button type="warning" v-on:click="motor_move(10)">+10mm</el-button>
+				<el-button type="danger" v-on:click="motor_move(100)">+100mm</el-button>
+			</p>
+		</div>
+	</div>
+
+	<script src="mqttws31.min.js"></script>
+	<script src="vue.js"></script>
+	<script src="element.js"></script>
+<script>
+var app = new Vue({
+	el: '#app',
+	data: {
+		mqtt_connected: false,
+		mqtt_status: "connecting...",
+		mqtt_host: getpara("host", document.domain),
+		mqtt_port: getpara("port", 80),
+		mqtt_clientid: getpara("clientid", randomID()),
+		mqtt_topic: getpara("topic", "steppingmotor/"),
+		server_id: getpara("serverid", "default"),
+		server_version: null,
+		mqtt: null,
+		shutdown_timeout: null,
+		shutdown_count: null,
+		speed: "100"
+	},
+	methods: {
+		reconnect() {
+			this.server_version = null;
+			mqtt_send("query", "");
+		},
+		shutdown() {
+			if (this.shutdown_count == null) {
+				this.shutdown_count = 3;
+				clearTimeout(this.shutdown_timeout);
+				this.shutdown_timeout = setTimeout(function() {
+					app.shutdown_count = null;
+				}, 3000);
+				return;
+			} else if (this.shutdown_count > 1) {
+				this.shutdown_count -= 1;
+				clearTimeout(this.shutdown_timeout);
+				this.shutdown_timeout = setTimeout(function() {
+					app.shutdown_count = null;
+				}, 3000);
+				return;
+			}
+			mqtt_send(this.server_id + "/shutdown", "");
+			this.server_version = null;
+			this.shutdown_count = null;
+		},
+		motor_move(mm) {
+			if (this.server_version == null) {
+				console.error("server not connected");
+				return;
+			}
+			let count = mm * 20;
+			let frequency = this.speed * 40;
+			console.log("move " + mm + "mm (= " + count + " pulse)");
+			mqtt_send(this.server_id + "/move", "" + frequency + " " + count);
+		}
+	},
+	mounted() {
+		this.mqtt = new Paho.MQTT.Client(this.mqtt_host, this.mqtt_port, this.mqtt_clientid);
+		this.mqtt.onConnectionLost = mqtt_connection_lost;
+		this.mqtt.onMessageArrived = mqtt_message_arrive;
+		this.mqtt.connect({
+			useSSL: false, mqttVersion: 4, timeout: 3, keepAliveInterval: 10,
+			onSuccess: mqtt_connect, onFailure: mqtt_failure,
+		});
+	}
+});
+
+function getpara(name, alternative=null) {
+	var reg = new RegExp("(^|&)"+ name +"=([^&]*)(&|$)");
+	var r = window.location.search.substr(1).match(reg);
+	if(r!=null) return unescape(r[2]); return alternative;
+}
+
+function randomID() {
+	let length = 4;
+	let chars = '0123456789abcdefghijklmnopqrstuvwxyz';
+	var result = '';
+	for (var i = length; i > 0; --i) result += chars[Math.floor(Math.random() * chars.length)];
+	return result;
+}
+
+function mqtt_connect() {
+	app.mqtt_connected = true;
+	app.mqtt_status = "connected";
+	app.mqtt.subscribe(app.mqtt_topic + app.server_id + "/#");
+	mqtt_send("query", "");
+}
+
+var cmdcnt = 0;
+function mqtt_message_arrive(message) {
+	// console.log(message);
+	let str = message.payloadString;
+	let topic = message.destinationName;
+	console.log("[" + (++cmdcnt) + "] " + message.destinationName + ": " + str);
+	if (topic == app.mqtt_topic + app.server_id + "/reply") {
+		app.server_version = str;
+	}
+}
+
+function mqtt_connection_lost() {
+	app.mqtt_connected = false;
+	app.mqtt_status = "connection lost";
+}
+
+function mqtt_failure() {
+	app.mqtt_connected = false;
+	app.mqtt_status = "connection failed";
+}
+
+function mqtt_send(topic, payload) {
+	let message = new Paho.MQTT.Message(payload);
+	message.destinationName = app.mqtt_topic + topic;
+	console.log(message.destinationName);
+	app.mqtt.send(message);
+}
+
+</script>
+</body>
+</html>
