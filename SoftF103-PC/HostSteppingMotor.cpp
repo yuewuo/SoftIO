@@ -34,6 +34,12 @@ int motor_max = INT32_MAX;
 int motor_now = 0;
 mutex motor_lock;
 
+void report_min_now_max() {
+	char buf[128];
+	sprintf(buf, "%d %d %d", motor_min, motor_now, motor_max);
+	hostmqtt.publish((string("steppingmotor/") + ServerID + "/now_min_max").c_str(), buf);
+}
+
 void motor_go(float frequency, int count) {
 	if (frequency < MIN_FREQUENCY || frequency > MAX_FREQUENCY) return;
 	motor_lock.lock();
@@ -52,9 +58,7 @@ void motor_go(float frequency, int count) {
 		f103.GPIO_streaming(frequency, samples);
 	}
 	motor_now += count;
-	char buf[128];
-	sprintf(buf, "%d", count);
-	hostmqtt.publish((string("steppingmotor/") + ServerID + "/now").c_str(), buf);  // publish now position
+	report_min_now_max();
 	motor_lock.unlock();
 }
 
@@ -125,6 +129,7 @@ void hostOnMessage(MQTT& mqtt, const struct mosquitto_message *message) {
 	string prefix = string("steppingmotor/") + ServerID + "/";
 	if (topic == "steppingmotor/query") {
 		mqtt.publish((string("steppingmotor/") + ServerID + "/reply").c_str(), VERSION_STR);
+		report_min_now_max();
 	} else if (topic.compare(0, prefix.length(), prefix) == 0) {
 		string subtopic = topic.substr(prefix.length());
 		if (subtopic == "shutdown") {
@@ -137,10 +142,13 @@ void hostOnMessage(MQTT& mqtt, const struct mosquitto_message *message) {
 			motor_go(frequency, count);
 		} else if (subtopic == "set_now") {
 			motor_now = atoi(str);
+			report_min_now_max();
 		} else if (subtopic == "set_min") {
 			motor_min = atoi(str);
+			report_min_now_max();
 		} else if (subtopic == "set_max") {
 			motor_max = atoi(str);
+			report_min_now_max();
 		}
 	}
 }

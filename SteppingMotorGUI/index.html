@@ -64,6 +64,17 @@
 				<el-button type="warning" v-on:click="motor_move(10)">+10mm</el-button>
 				<el-button type="danger" v-on:click="motor_move(100)">+100mm</el-button>
 			</p>
+			<p><el-button type="danger" size="mini" v-on:click="motor_set('min', motor_min)">set Min</el-button>
+				<input type="number" v-model="motor_min"/> ≤ 
+				<el-button type="danger" size="mini" v-on:click="motor_set('now', motor_now)">set Now</el-button>
+				<input type="number" v-model="motor_now"/> ≤ 
+				<el-button type="danger" size="mini" v-on:click="motor_set('max', motor_max)">set Max</el-button>
+				<input type="number" v-model="motor_max"/>
+			</p>
+			<p>
+				<el-button type="primary" v-on:click="motor_as_start">set now as start point</el-button>
+				<el-button type="danger" v-on:click="motor_as_end">set now as end point</el-button>
+			</p>
 		</div>
 	</div>
 
@@ -85,7 +96,10 @@ var app = new Vue({
 		mqtt: null,
 		shutdown_timeout: null,
 		shutdown_count: null,
-		speed: "100"
+		speed: 100,
+		motor_min: 0,
+		motor_now: 0,
+		motor_max: 0,
 	},
 	methods: {
 		reconnect() {
@@ -121,6 +135,18 @@ var app = new Vue({
 			let frequency = this.speed * 40;
 			console.log("move " + mm + "mm (= " + count + " pulse)");
 			mqtt_send(this.server_id + "/move", "" + frequency + " " + count);
+		},
+		motor_set(name, val) {
+			// console.log(name);
+			// console.log(val);
+			mqtt_send(this.server_id + "/set_" + name, "" + val);
+		},
+		motor_as_start() {
+			mqtt_send(this.server_id + "/set_min" + name, "0");
+			mqtt_send(this.server_id + "/set_now" + name, "0");
+		},
+		motor_as_end() {
+			mqtt_send(this.server_id + "/set_max" + name, "" + this.motor_now);
 		}
 	},
 	mounted() {
@@ -161,8 +187,18 @@ function mqtt_message_arrive(message) {
 	let str = message.payloadString;
 	let topic = message.destinationName;
 	console.log("[" + (++cmdcnt) + "] " + message.destinationName + ": " + str);
-	if (topic == app.mqtt_topic + app.server_id + "/reply") {
+	let prefix = app.mqtt_topic + app.server_id + "/";
+	if (topic == prefix + "reply") {
 		app.server_version = str;
+	} else if (topic == prefix + "now_min_max") {
+		let splt = str.split(" ");
+		if (splt.length != 3) {
+			console.error("now_min_max reply error: " + splt);
+			return;
+		}
+		app.motor_min = parseInt(splt[0]);
+		app.motor_now = parseInt(splt[1]);
+		app.motor_max = parseInt(splt[2]);
 	}
 }
 
