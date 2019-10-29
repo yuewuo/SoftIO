@@ -42,8 +42,8 @@ typedef struct {
 
     uint32_t version;  // 系统版本，见compile_conf.h
 
-	uint32_t mem_size;  // sizeof(ReaderH7_Mem_t)
-	
+	uint32_t mem_size;  // sizeof(SoftF103_Mem_t)
+
 	uint16_t siorx_overflow;
 
 // GPIO functions
