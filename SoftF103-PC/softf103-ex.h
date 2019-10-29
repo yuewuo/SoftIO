@@ -247,8 +247,8 @@ void SoftF103Host_t::GPIO_streaming(float frequency, vector<uint8_t> samples) {
 	mem.gpio_count = samples.size();
 	softio_blocking(write, sio, mem.gpio_count);  // write count variable to start transmitting
 	while (written_cnt < samples.size()) {
-		// printf("mem.fifo0.length: %d, samples.size(): %d, mem.gpio_count: %d, written_cnt: %d\n", mem.fifo0.length, samples.size(), mem.gpio_count, written_cnt);
-		uint32_t write_len = mem.fifo0.length - 1 + samples.size() - mem.gpio_count - written_cnt;  // maximum write without overflow
+		// printf("mem.fifo0.length: %d, samples.size(): %d, mem.gpio_count: %d, written_cnt: %d\n", __FIFO_GET_LENGTH(&mem.fifo0), samples.size(), mem.gpio_count, written_cnt);
+		uint32_t write_len = __FIFO_GET_LENGTH(&mem.fifo0) - 1 + samples.size() - mem.gpio_count - written_cnt;  // maximum write without overflow
 		write_len = min(write_len, (uint32_t)(samples.size() - written_cnt));  // cannot exceed remained samples
 		if (verbose) printf("[%d/%d] stream %d samples\n", (int)(samples.size() - mem.gpio_count), (int)samples.size(), (int)write_len);
 		for (uint32_t i=0; i<write_len; ++i) {

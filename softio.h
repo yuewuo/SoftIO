@@ -5,6 +5,10 @@
  * with bidirectional memory-sync, softio provides flexible configuration and data transfer between PC and MCU
  */
 
+// if you define this option, it will not store softio transaction headers, and will skip all responses
+// however, if you enable this, read/read_fifo will not work properly, since all the responses are discarded
+//#define NOT_HANDLE_RESPOND
+
 #include "fifo.h"
 #include "assert.h"
 #ifdef SOFTIO_USE_FUNCTION  // for c++ lambda support
@@ -82,10 +86,10 @@ static inline void __softio_head_deque(Fifo_t* rx, SoftIO_Head_t* head) {
 #endif
 
 typedef struct {
-	uint8_t status;  // TODO
-	uint8_t length;  // a simple fifo here
-	uint8_t write;
-	uint8_t read;
+	// uint8_t status;  // TODO
+	uint16_t length;  // a simple fifo here
+	uint16_t write;
+	uint16_t read;
 	SoftIO_Head_t transactions[SOFTIO_HEAD_LENGTH];
 	char* base;  // the base pointer of memory
 	uint32_t size;  // the size of memory
@@ -166,6 +170,39 @@ static inline int __softio_try_handle_one(SoftIO_t* softio) {
 	char sum;
 	// printf("type: %u\n", type);
 	if (SOFTIO_HEAD_TYPE_IS_RET(type)) {  // respond
+#ifdef NOT_HANDLE_RESPOND
+		switch (type & 0x0E) {
+		case SOFTIO_HEAD_TYPE_READ:
+			SOFTIO_HANDLE_NEED_READ(2);  // length not ready
+			length = (unsigned char)fifo_preread(softio->rx, 1);
+			SOFTIO_HANDLE_NEED_READ(length + 3);  // data not ready
+			for (uint32_t i=0; i<length+3; ++i) fifo_deque(softio->rx);
+			break;
+		case SOFTIO_HEAD_TYPE_WRITE:
+			SOFTIO_HANDLE_NEED_READ(2);  // length not ready
+			fifo_deque(softio->rx);  // get type out
+			fifo_deque(softio->rx);
+			break;
+		case SOFTIO_HEAD_TYPE_READ_FIFO:
+			SOFTIO_HANDLE_NEED_READ(2);  // length not ready
+			length = (unsigned char)fifo_preread(softio->rx, 1);
+			SOFTIO_HANDLE_NEED_READ(length + 3);  // data not ready
+			for (uint32_t i=0; i<length+3; ++i) fifo_deque(softio->rx);
+			break;
+		case SOFTIO_HEAD_TYPE_WRITE_FIFO:
+			SOFTIO_HANDLE_NEED_READ(2);  // length not ready
+			fifo_deque(softio->rx);  // get type out
+			fifo_deque(softio->rx);
+			break;
+		case SOFTIO_HEAD_TYPE_CLEAR_FIFO:
+		case SOFTIO_HEAD_TYPE_RESET_FIFO:
+			SOFTIO_HANDLE_NEED_READ(1);  // length not ready
+			fifo_deque(softio->rx);  // get type out
+			break;
+		default:
+			assert(0 && "invalid respond");
+		}
+#else
 		assert(softio->read != softio->write && "transaction empty but receive respond");
 		SoftIO_Head_t* rptr = softio->transactions + softio->read;
 		assert(SOFTIO_HEAD_TYPE_RAW(type) == rptr->type && "ret and request must be the same type");
@@ -219,6 +256,7 @@ static inline int __softio_try_handle_one(SoftIO_t* softio) {
 		}
 		if (softio->callback) softio->callback(softio, rptr);
 		softio->read = (softio->read + 1) % softio->length;  // delete this transaction
+#endif
 	} else {  // request
 		switch (type) {
 		case SOFTIO_HEAD_TYPE_READ:
@@ -290,7 +328,7 @@ static inline int __softio_try_handle_one(SoftIO_t* softio) {
 			} assert(sum == 0 && "check sum failed for write");
 			fptr = (Fifo_t*)(softio->base + head.addr);
 			length = head.length;
-			if (fifo_remain(fptr) < length) length = fifo_remain(fptr);  // only get these
+			assert(length <= fifo_remain(fptr) && "fifo is not enough to write");
 			for (uint32_t i=0; i<length; ++i) {  // actually write into local memory
 				fifo_enque(fptr, fifo_deque(softio->rx));
 			} for (uint32_t i=0; i<head.length - length; ++i) fifo_deque(softio->rx);  // get overflowed ones
@@ -329,31 +367,35 @@ static inline void __softio_try_handle_all(SoftIO_t* softio) {
 #define softio_try_handle_all(softio) __softio_try_handle_all(&(softio))
 
 static inline void __softio_gets_fifo_blocking(SoftIO_t* softio, Fifo_t* fifo, size_t size) {  // wait for fifo_count > size
-	assert(fifo->length > size);
+	assert(__FIFO_GET_LENGTH(fifo) > size);
 	if (!softio->gets) { while (fifo_count(fifo) < size) if (softio->yield) softio->yield(); }
 	else {  // use gets function to get bytes, note that fifo may not be continuous so just do it
 		while (fifo_count(fifo) < size) {  // always try
 			size_t length = size - fifo_count(fifo);
 			if (length > __fifo_write_base_length(fifo)) length = __fifo_write_base_length(fifo);
 			size_t ret = softio->gets(__fifo_write_base(fifo), length);
-			fifo->write = (fifo->write + ret) % fifo->length;
+			fifo->write = (fifo->write + ret) % __FIFO_GET_LENGTH(fifo);
 		}
 	}
 }
-#define softio_flush_fifo(softio, fifo) __softio_puts_fifo_blocking(&(softio), &(fifo), (fifo).length - 1)
+#define softio_flush_fifo(softio, fifo) __softio_puts_fifo_blocking(&(softio), &(fifo), __FIFO_GET_LENGTH(&(fifo)) - 1)
 #define softio_flush(softio) do { \
 	softio_flush_fifo(softio, (*(softio).tx)); \
-	if ((softio).available) __softio_gets_fifo_blocking(&(softio), (softio).rx, (softio).available()); \
+	if ((softio).available) { \
+		unsigned int wait_cnt = (softio).available() + fifo_count((softio).rx); \
+		if (wait_cnt >= __FIFO_GET_LENGTH(((softio).rx))) wait_cnt = __FIFO_GET_LENGTH(((softio).rx)) - 2; \
+		__softio_gets_fifo_blocking(&(softio), (softio).rx, wait_cnt); \
+	} \
 } while(0)
 static inline void __softio_puts_fifo_blocking(SoftIO_t* softio, Fifo_t* fifo, size_t size) {  // wait for fifo_remain > size
-	assert(fifo->length > size);
+	assert(__FIFO_GET_LENGTH(fifo) > size);
 	if (!softio->puts) { while (fifo_count(fifo) < size) if (softio->yield) softio->yield(); }
-	else {  // use gets function to put bytes
+	else {  // use puts function to put bytes
 		while (fifo_remain(fifo) < size) {  // always try
 			size_t length = size - fifo_remain(fifo);
 			if (length > __fifo_read_base_length(fifo)) length = __fifo_read_base_length(fifo);
 			size_t ret = softio->puts(__fifo_read_base(fifo), length);
-			fifo->read = (fifo->read + ret) % fifo->length;
+			fifo->read = (fifo->read + ret) % __FIFO_GET_LENGTH(fifo);
 		}
 	}
 }
@@ -379,14 +421,18 @@ static inline void __softio_wait_one(SoftIO_t* softio) {
 } while (0)
 
 static inline void __softio_delay_read_no_check(SoftIO_t* softio, uint32_t addr, uint32_t length) {
+#ifndef NOT_HANDLE_RESPOND
 	if ((softio->write + 1) % softio->length == softio->read) __softio_wait_one(softio);  // queue is full, wait one
 	while (fifo_remain(softio->tx) < 4) __softio_wait_one(softio);  // sending queue is full, wait
+#endif
 	SoftIO_Head_t* tptr = softio->transactions + softio->write;
 	tptr->type = SOFTIO_HEAD_TYPE_READ;
 	tptr->addr = addr;
 	tptr->length = length;
 	// printf("length %u\n", tptr->length);
+#ifndef NOT_HANDLE_RESPOND
 	softio->write = (softio->write + 1) % softio->length;
+#endif
 	__softio_head_enque(softio->tx, tptr);
 }
 static inline void __softio_delay_read(SoftIO_t* softio, void* addr, uint32_t length) {
@@ -403,13 +449,17 @@ static inline void __softio_delay_read(SoftIO_t* softio, void* addr, uint32_t le
 #define softio_delay_read_between(softio, var1, var2) __softio_delay_read(&(softio), &(var1), (char*)(void*)(&(var2)) - (char*)(void*)(&(var1)) + sizeof(var2))
 
 static inline void __softio_delay_write_no_check(SoftIO_t* softio, uint32_t addr, uint32_t length) {
+#ifndef NOT_HANDLE_RESPOND
 	if ((softio->write + 1) % softio->length == softio->read) __softio_wait_one(softio);  // queue is full, wait one
 	while (fifo_remain(softio->tx) < 5 + length) __softio_wait_one(softio);  // sending queue is full, wait
+#endif
 	SoftIO_Head_t* tptr = softio->transactions + softio->write;
 	tptr->type = SOFTIO_HEAD_TYPE_WRITE;
 	tptr->addr = addr;
 	tptr->length = length;
+#ifndef NOT_HANDLE_RESPOND
 	softio->write = (softio->write + 1) % softio->length;
+#endif
 	__softio_head_enque(softio->tx, tptr);
 	char sum = 0;
 	for (uint32_t i=0; i<length; ++i) {
@@ -432,13 +482,17 @@ static inline void __softio_delay_write(SoftIO_t* softio, void* addr, uint32_t l
 #define softio_delay_write_between(softio, var1, var2) __softio_delay_write(&(softio), &(var1), (char*)(void*)(&(var2)) - (char*)(void*)(&(var1)) + sizeof(var2))
 
 static inline void __softio_delay_read_fifo_no_check(SoftIO_t* softio, uint32_t addr, uint32_t length) {
+#ifndef NOT_HANDLE_RESPOND
 	if ((softio->write + 1) % softio->length == softio->read) __softio_wait_one(softio);  // queue is full, wait one
-	while (fifo_remain(softio->tx) < 5 + length) __softio_wait_one(softio);  // sending queue is full, wait
+	while (fifo_remain(softio->tx) < 4) __softio_wait_one(softio);  // sending queue is full, wait
+#endif
 	SoftIO_Head_t* tptr = softio->transactions + softio->write;
 	tptr->type = SOFTIO_HEAD_TYPE_READ_FIFO;
 	tptr->addr = addr;
 	tptr->length = length;
+#ifndef NOT_HANDLE_RESPOND
 	softio->write = (softio->write + 1) % softio->length;
+#endif
 	__softio_head_enque(softio->tx, tptr);
 }
 static inline void __softio_delay_read_fifo(SoftIO_t* softio, Fifo_t* addr, uint32_t length) {
@@ -452,13 +506,17 @@ static inline void __softio_delay_read_fifo(SoftIO_t* softio, Fifo_t* addr, uint
 #define softio_delay_read_fifo(softio, var) softio_delay_read_fifo_part(softio, var, 254)
 
 static inline void __softio_delay_write_fifo_no_check(SoftIO_t* softio, uint32_t addr, uint32_t length, Fifo_t* fifo) {
+#ifndef NOT_HANDLE_RESPOND
 	if ((softio->write + 1) % softio->length == softio->read) __softio_wait_one(softio);  // queue is full, wait one
-	while (fifo_remain(softio->tx) < 4) __softio_wait_one(softio);  // sending queue is full, wait
+	while (fifo_remain(softio->tx) < 5 + length) __softio_wait_one(softio);  // sending queue is full, wait
+#endif
 	SoftIO_Head_t* tptr = softio->transactions + softio->write;
 	tptr->type = SOFTIO_HEAD_TYPE_WRITE_FIFO;
 	tptr->addr = addr;
 	tptr->length = length;
+#ifndef NOT_HANDLE_RESPOND
 	softio->write = (softio->write + 1) % softio->length;
+#endif
 	__softio_head_enque(softio->tx, tptr);
 	char sum = 0;
 	for (uint32_t i=0; i<length; ++i) {
@@ -479,13 +537,17 @@ static inline void __softio_delay_write_fifo(SoftIO_t* softio, Fifo_t* addr, uin
 
 static inline void __softio_delay_clear_reset_fifo(SoftIO_t* softio, Fifo_t* addr, uint32_t type) {
 	assert(softio->base <= (char*)addr && softio->base + softio->size >= (char*)addr + sizeof(Fifo_t) && "fifo range exceeded");
+#ifndef NOT_HANDLE_RESPOND
 	if ((softio->write + 1) % softio->length == softio->read) __softio_wait_one(softio);  // queue is full, wait one
 	while (fifo_remain(softio->tx) < 4) __softio_wait_one(softio);  // sending queue is full, wait
+#endif
 	SoftIO_Head_t* tptr = softio->transactions + softio->write;
 	tptr->type = type;
 	tptr->addr = (char*)addr - softio->base;
 	tptr->length = 0;
+#ifndef NOT_HANDLE_RESPOND
 	softio->write = (softio->write + 1) % softio->length;
+#endif
 	__softio_head_enque(softio->tx, tptr);
 }
 #define softio_delay_clear_fifo(softio, var) __softio_delay_clear_reset_fifo(&(softio), &(var), SOFTIO_HEAD_TYPE_CLEAR_FIFO)
@@ -503,13 +565,25 @@ static inline void __softio_delay_clear_reset_fifo(SoftIO_t* softio, Fifo_t* add
 	}\
 } while(0)
 
+// WARNING: could only dump 32bit machine's fifo
+#if __SIZEOF_POINTER__ == 8
 #define softio_protected_dump_remote_fifo(prefix, softio, var) do {\
 	assert(&(var) != (softio).rx && &(var) != (softio).tx && "dump remote rx and tx not supported");\
 	softio_wait_all(softio);  /* finish all the transactions buffered */\
 	Fifo_t tmp = var;  /* save current state of local fifo */\
 	softio_blocking(read, softio, var);\
-	printf(prefix #var ": usage(%d/%d), read(%d), write(%d)\n", fifo_data_count(&(var)), (var).length, (var).read, (var).write);\
+	printf(prefix #var ": usage(%d/%d), read(%d), write(%d)\n", ((var).write - (var).read + (var).__H) % (var).__H, (var).__H, (var).read, (var).write);\
 	var = tmp;  /* restore state of local fifo */\
 } while (0)
+#else
+#define softio_protected_dump_remote_fifo(prefix, softio, var) do {\
+	assert(&(var) != (softio).rx && &(var) != (softio).tx && "dump remote rx and tx not supported");\
+	softio_wait_all(softio);  /* finish all the transactions buffered */\
+	Fifo_t tmp = var;  /* save current state of local fifo */\
+	softio_blocking(read, softio, var);\
+	printf(prefix #var ": usage(%d/%d), read(%d), write(%d)\n", ((var).write - (var).read + (var).length) % (var).length, (var).length, (var).read, (var).write);\
+	var = tmp;  /* restore state of local fifo */\
+} while (0)
+#endif
 
 #endif
