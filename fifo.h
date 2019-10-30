@@ -15,7 +15,6 @@ typedef struct {
 // #define FIFO_PTR(base) ((char*)((long long)(base)))
 // #define FIFO_BASE(ptr) ((uint32_t)((long long)(ptr)))
 #define __FIFO_GET_PTR8(fifo) ((fifo_base_length_t*)((fifo)->__L + (((long long)(fifo)->__H) << 32)))
-#define __FIFO_INIT(fifo) do { fifo_base_length_t* ptr = new fifo_base_length_t; (fifo)->__L = ((long long)ptr); (fifo)->__H = ((long long)ptr) >> 32; } while(0)
 #define __FIFO_SET_LENGTH(fifo, length) __FIFO_GET_PTR8(fifo)->length = (length)
 #define __FIFO_SET_BASE(fifo, base) __FIFO_GET_PTR8(fifo)->base = (base)
 #define __FIFO_GET_LENGTH(fifo) (__FIFO_GET_PTR8(fifo)->length)
@@ -23,14 +22,17 @@ typedef struct {
 #else
 // #define FIFO_PTR(base) ((char*)(base))
 // #define FIFO_BASE(ptr) ((uint32_t)(ptr))
-#define __FIFO_INIT(fifo)  // do nothing
 #define __FIFO_SET_LENGTH(fifo, length) (fifo)->length = (length)
 #define __FIFO_SET_BASE(fifo, base) (fifo)->base = (uint32_t)(base)
 #define __FIFO_GET_LENGTH(fifo) ((fifo)->length)
 #define __FIFO_GET_BASE(fifo) ((char*)((fifo)->base))
 #endif
 
+#if defined(__cplusplus)
+struct Fifo_t {
+#else
 typedef struct {
+#endif
 #if __SIZEOF_POINTER__ == 8
     uint32_t __L;
     uint32_t __H;
@@ -40,11 +42,21 @@ typedef struct {
 #endif
     uint32_t read;
     uint32_t write;
-#if __SIZEOF_POINTER__ == 8 && defined(__cplusplus)
+#if __SIZEOF_POINTER__ == 8
+#if defined(__cplusplus)
     uint32_t Length() { return __FIFO_GET_LENGTH(this); }
     char* Base() { return __FIFO_GET_BASE(this); }
+    Fifo_t() { fifo_base_length_t* ptr = new fifo_base_length_t; __L = ((long long)ptr); __H = ((long long)ptr) >> 32; }
+    ~Fifo_t() { delete __FIFO_GET_PTR8(this); }
+#else
+#error memory leak will happen in 64-bit C program, please use C++ instead
 #endif
+#endif
+#if defined(__cplusplus)
+};
+#else
 } Fifo_t;
+#endif
 
 #if __SIZEOF_POINTER__ == 8
 static inline void fifo_destroy(Fifo_t* fifo) { delete __FIFO_GET_PTR8(fifo); }  // do not call this will cause memory leak
@@ -57,7 +69,6 @@ static inline void fifo_destroy(Fifo_t* fifo) {}  // do nothing
 
 static inline void fifo_init(Fifo_t* fifo, char* base, uint32_t length) {
 // there is risk to convert 64bit pointer to 32bit fifo_ptr, so sanity check is done on 64bit program
-    __FIFO_INIT(fifo);
     __FIFO_SET_BASE(fifo, base);
     __FIFO_SET_LENGTH(fifo, length);
     fifo->read = 0;
