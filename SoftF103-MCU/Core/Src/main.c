@@ -89,6 +89,24 @@ void my_before(void* softio, SoftIO_Head_t* head) {
     if (softio_is_variable_included(sio, *head, mem.gpio_in)) {  // wanna read variable
       mem.gpio_in = GPIOB->IDR >> 8;  // PB15 ~ PB8
     }
+    if (softio_is_variable_included(sio, *head, mem.adc1)) {
+      mem.adc1 = 0;
+      if (HAL_ADC_Start(&hadc1) == HAL_OK) {
+        if (HAL_ADC_PollForConversion(&hadc1, 100) == HAL_OK) {  // timeout = 100ms
+          uint32_t adc_val = HAL_ADC_GetValue(&hadc1);
+          mem.adc1 = adc_val;
+        }
+      }
+    }
+    if (softio_is_variable_included(sio, *head, mem.adc2)) {
+      mem.adc2 = 0;
+      if (HAL_ADC_Start(&hadc2) == HAL_OK) {
+        if (HAL_ADC_PollForConversion(&hadc2, 100) == HAL_OK) {  // timeout = 100ms
+          uint32_t adc_val = HAL_ADC_GetValue(&hadc2);
+          mem.adc2 = adc_val;
+        }
+      }
+    }
   }
   if (need_disable_irq) __disable_irq();
 }
