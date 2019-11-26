@@ -1,7 +1,9 @@
 .vscode
 build
+build2
 
 # SoftF103 do not include compiled objects
 /SoftF103-MCU/MDK-ARM/*
 !/SoftF103-MCU/MDK-ARM/SoftF103-MCU.uvprojx
 !/SoftF103-MCU/MDK-ARM/startup_stm32f103xb.s
+SoftF103-PC/emulator/softf103-pseudo

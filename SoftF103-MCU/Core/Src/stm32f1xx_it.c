@@ -232,6 +232,7 @@ void TIM1_UP_IRQHandler(void)
         ++mem.gpio_underflow;
       } else {
         uint8_t tmp = fifo_deque(&mem.fifo0);
+        mem.gpio_out = tmp;
         GPIOB->BSRR = tmp | ( ((uint32_t)(~tmp & 0x0ff))<<16 );  // atomic write
       }
     }

@@ -30,7 +30,7 @@ link_libraries(serial)
 
 set(CMAKE_INSTALL_PREFIX ${PROJECT_BINARY_DIR})
 
-file(GLOB_RECURSE SRC_FILES "*.cpp")
+file(GLOB SRC_FILES "*.cpp")
 foreach (cpp ${SRC_FILES})
 	string(REGEX REPLACE ".+/(.+)\\..*" "\\1" cppname ${cpp})
 	add_executable(${cppname} ${cpp})
