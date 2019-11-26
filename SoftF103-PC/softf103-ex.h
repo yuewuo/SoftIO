@@ -37,6 +37,10 @@ struct SoftF103Host_t {
 // Timer control: timer = 1 or 2
 	pair<float, float> Timer_Start_PWM(int timer, float frequency, float duty);
 	float Timer_Start_IT(int timer, float frequency);
+// ADC control
+	float ADC_read(int adc);  // adc = 1 or 2
+	pair<float, float> ADC_read_both();  // still read adc1 then adc2, NOT simultaneous only much shorter interval
+	vector<pair<float, float>> ADC_streaming(float frequency, int length);
 };
 
 #ifdef SOFTF103HOST_IMPLEMENTATION
@@ -235,14 +239,14 @@ void SoftF103Host_t::GPIO_streaming(float frequency, vector<uint8_t> samples) {
 	fifo_clear(&mem.fifo0);
 	float actual = Timer_Start_IT(1, frequency);  // start timer
 	if (verbose) printf("GPIO streaming frequency: %f kHz\n", actual/1e3);
-	// first fullfill the fifo
+	// first fill the fifo
 	uint32_t written_cnt = 0;  // the length of sent
 	for (uint32_t i=0; i<samples.size() && !fifo_full(&mem.fifo0); ++i) {
 		fifo_enque(&mem.fifo0, samples[written_cnt]);
 		++written_cnt;\
 	}
 	while (!fifo_empty(&mem.fifo0)) {
-		softio_delay_flush_try(write_fifo, sio, mem.fifo0);  // fullfill the remote fifo
+		softio_delay_flush_try(write_fifo, sio, mem.fifo0);  // fill the remote fifo
 	}
 	mem.gpio_count = samples.size();
 	softio_blocking(write, sio, mem.gpio_count);  // write count variable to start transmitting
@@ -253,14 +257,14 @@ void SoftF103Host_t::GPIO_streaming(float frequency, vector<uint8_t> samples) {
 		if (verbose) printf("[%d/%d] stream %d samples\n", (int)(samples.size() - mem.gpio_count), (int)samples.size(), (int)write_len);
 		for (uint32_t i=0; i<write_len; ++i) {
 			fifo_enque(&mem.fifo0, samples[written_cnt]);
-			++written_cnt;\
+			++written_cnt;
 		}
 		while (!fifo_empty(&mem.fifo0)) {
-			softio_delay(write_fifo, sio, mem.fifo0);  // fullfill the remote fifo
+			softio_delay(write_fifo, sio, mem.fifo0);  // fill the remote fifo
 		}
 		softio_delay_flush_try(read_between, sio, mem.gpio_count, mem.gpio_underflow);
 		this_thread::sleep_for(chrono::milliseconds(1));
-		assert(mem.gpio_underflow == 0 && "tx overflow occurs, may be system overloaded or frequency too high");
+		assert(mem.gpio_underflow == 0 && "tx underflow occurs, may be system overloaded or frequency too high");
 	}
 	// waiting for stop
 	while (1) {
@@ -269,6 +273,61 @@ void SoftF103Host_t::GPIO_streaming(float frequency, vector<uint8_t> samples) {
 		if (verbose) printf("[%d/%d] waiting %d samples\n", (int)(samples.size() - mem.gpio_count), (int)samples.size(), mem.gpio_count);
 		this_thread::sleep_for(chrono::milliseconds(100));
 	}
+}
+
+float SoftF103Host_t::ADC_read(int adc) {
+	assert((adc == 1 || adc == 2 ) && "invalid adc number");
+	if (adc == 1) {
+		softio_blocking(read, sio, mem.adc1);
+		return 3.3 * mem.adc1 / 4096.;
+	} else {
+		softio_blocking(read, sio, mem.adc2);
+		return 3.3 * mem.adc2 / 4096.;
+	}
+}
+
+pair<float, float> SoftF103Host_t::ADC_read_both() {
+	softio_blocking(read_between, sio, mem.adc1, mem.adc2);
+	return make_pair(3.3 * mem.adc1 / 4096., 3.3 * mem.adc2 / 4096.);
+}
+
+vector<pair<float, float>> SoftF103Host_t::ADC_streaming(float frequency, int length) {
+	// assert(frequency > 0 && frequency <= 50e3 && "ADC clock = 12MHz, sampling time = 239.5 cycles => 50kHz max (cannot reach due to small fifo length)");
+	assert(frequency > 0 && frequency <= 20e3 && "experimental maximum speed");
+	assert(length > 0);
+	mem.adc_count = 0;
+	mem.adc_overflow = 0;
+	softio_blocking(write_between, sio, mem.adc_count, mem.adc_overflow);  // clear previous count and overflow count
+	softio_blocking(reset_fifo, sio, mem.fifo1);  // reset fifo1
+	fifo_clear(&mem.fifo1);
+	float actual = Timer_Start_IT(1, frequency);  // start timer
+	if (verbose) printf("ADC streaming frequency: %f kHz\n", actual/1e3);
+	mem.adc_count = length;
+	softio_delay(write, sio, mem.adc_count);  // write count variable to start receiving
+	int recv_length = 0;
+	vector<pair<float, float>> samples;
+	while (recv_length < length) {
+		// printf("mem.fifo0.length: %d, samples.size(): %d, mem.gpio_count: %d, written_cnt: %d\n", __FIFO_GET_LENGTH(&mem.fifo0), samples.size(), mem.gpio_count, written_cnt);
+		softio_delay(read, sio, mem.adc_overflow);
+		softio_blocking(read_fifo_part, sio, mem.fifo1, 252);  // 63 * 4byte data
+		assert(mem.adc_overflow == 0 && "rx overflow occurs, may be system overloaded or frequency too high");
+		assert(fifo_count(&mem.fifo1) % 4 == 0);
+		int has_samples = fifo_count(&mem.fifo1) / 4;
+		while (!fifo_empty(&mem.fifo1)) {
+			uint16_t adc1 = (uint8_t)fifo_deque(&mem.fifo1);
+			adc1 |= ((uint16_t)(uint8_t)fifo_deque(&mem.fifo1)) << 8;
+			uint16_t adc2 = (uint8_t)fifo_deque(&mem.fifo1);
+			adc2 |= ((uint16_t)(uint8_t)fifo_deque(&mem.fifo1)) << 8;
+			samples.push_back(make_pair(3.3 * adc1 / 4096., 3.3 * adc2 / 4096.));
+			recv_length += 1;
+		}
+		if (verbose) printf("[%d/%d] stream %d samples\n", (int)(samples.size()), length, has_samples);
+		if (actual < 5e3) this_thread::sleep_for(chrono::milliseconds(1));
+	}
+	softio_blocking(read_between, sio, mem.adc_count, mem.adc_overflow);
+	assert(mem.adc_count == 0 && "strange, should not be here");
+	assert(mem.adc_overflow == 0 && "rx overflow occurs, may be system overloaded or frequency too high");
+	return samples;
 }
 
 #endif

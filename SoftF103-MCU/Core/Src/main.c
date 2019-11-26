@@ -21,6 +21,7 @@
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
 #include "adc.h"
+#include "dma.h"
 #include "spi.h"
 #include "tim.h"
 #include "usart.h"
@@ -84,26 +85,26 @@ void my_before(void* softio, SoftIO_Head_t* head) {
     if (softio_is_variable_included(sio, *head, mem.gpio_count_add)) {  // atomic write
       need_disable_irq = 1;
     }
+    if (softio_is_variable_included(sio, *head, mem.adc_count)) {  // atomic write
+      need_disable_irq = 1;
+    }
+    if (softio_is_variable_included(sio, *head, mem.adc_count_add)) {  // atomic write
+      need_disable_irq = 1;
+    }
   }
   if (head->type == SOFTIO_HEAD_TYPE_READ) {
     if (softio_is_variable_included(sio, *head, mem.gpio_in)) {  // wanna read variable
       mem.gpio_in = GPIOB->IDR >> 8;  // PB15 ~ PB8
     }
-    if (softio_is_variable_included(sio, *head, mem.adc1)) {
-      mem.adc1 = 0;
-      if (HAL_ADC_Start(&hadc1) == HAL_OK) {
-        if (HAL_ADC_PollForConversion(&hadc1, 100) == HAL_OK) {  // timeout = 100ms
-          uint32_t adc_val = HAL_ADC_GetValue(&hadc1);
-          mem.adc1 = adc_val;
-        }
-      }
-    }
-    if (softio_is_variable_included(sio, *head, mem.adc2)) {
-      mem.adc2 = 0;
-      if (HAL_ADC_Start(&hadc2) == HAL_OK) {
-        if (HAL_ADC_PollForConversion(&hadc2, 100) == HAL_OK) {  // timeout = 100ms
-          uint32_t adc_val = HAL_ADC_GetValue(&hadc2);
-          mem.adc2 = adc_val;
+    uint8_t softio_is_variable_included_adc1 = softio_is_variable_included(sio, *head, mem.adc1);
+    uint8_t softio_is_variable_included_adc2 = softio_is_variable_included(sio, *head, mem.adc2);
+    if (softio_is_variable_included_adc1 || softio_is_variable_included_adc2) {
+      if (softio_is_variable_included_adc1) mem.adc1 = 0;
+      if (softio_is_variable_included_adc2) mem.adc2 = 0;
+      if (HAL_ADC_Start(&hadc2) == HAL_OK && HAL_ADC_Start(&hadc1) == HAL_OK) {  // read simultaneous
+        if (HAL_ADC_PollForConversion(&hadc2, 100) == HAL_OK && HAL_ADC_PollForConversion(&hadc1, 100) == HAL_OK) {  // timeout = 100ms
+          if (softio_is_variable_included_adc1) mem.adc1 = HAL_ADC_GetValue(&hadc1);  // convert to 16bit
+          if (softio_is_variable_included_adc2) mem.adc2 = HAL_ADC_GetValue(&hadc2);
         }
       }
     }
@@ -166,8 +167,40 @@ void my_after(void* softio, SoftIO_Head_t* head) {
     if (softio_is_variable_included(sio, *head, mem.gpio_count_add)) {  // atomic write
       need_enable_irq = 1;
     }
+    if (softio_is_variable_included(sio, *head, mem.adc_count)) {  // atomic write
+      need_enable_irq = 1;
+    }
+    if (softio_is_variable_included(sio, *head, mem.adc_count_add)) {  // atomic write
+      need_enable_irq = 1;
+    }
   }
   if (need_enable_irq) __enable_irq();
+}
+// this function should be called first adc1 then adc2
+uint8_t adc1_callback_ready = 0;
+uint8_t adc2_callback_ready = 0;
+uint16_t adc1_callback_val;
+uint16_t adc2_callback_val;
+void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* hadc) {
+  uint32_t adc = HAL_ADC_GetValue(hadc);
+  if (hadc == &hadc1) {
+    adc1_callback_val = adc;
+    adc1_callback_ready = 1;
+  } else {
+    adc2_callback_val = adc;
+    adc2_callback_ready = 1;
+  }
+  if (adc1_callback_ready && adc2_callback_ready) {
+    if (fifo_remain(&mem.fifo1) < 4) {
+      ++mem.adc_overflow;
+    } else {
+      // assert(adc1_callback_val < 4096 && adc2_callback_val < 4096);
+      fifo_enque(&mem.fifo1, adc1_callback_val);
+      fifo_enque(&mem.fifo1, adc1_callback_val >> 8);
+      fifo_enque(&mem.fifo1, adc2_callback_val);
+      fifo_enque(&mem.fifo1, adc2_callback_val >> 8);
+    }
+  }
 }
 /* USER CODE END 0 */
 
@@ -202,6 +235,7 @@ int main(void)
 
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
+  MX_DMA_Init();
   MX_USB_DEVICE_Init();
   MX_ADC1_Init();
   MX_ADC2_Init();

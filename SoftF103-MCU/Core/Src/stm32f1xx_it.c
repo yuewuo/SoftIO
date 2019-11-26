@@ -59,13 +59,17 @@
 
 /* External variables --------------------------------------------------------*/
 extern PCD_HandleTypeDef hpcd_USB_FS;
+extern DMA_HandleTypeDef hdma_adc1;
+extern ADC_HandleTypeDef hadc1;
+extern ADC_HandleTypeDef hadc2;
 extern SPI_HandleTypeDef hspi1;
 extern TIM_HandleTypeDef htim1;
 extern TIM_HandleTypeDef htim2;
 extern UART_HandleTypeDef huart1;
 extern UART_HandleTypeDef huart2;
 /* USER CODE BEGIN EV */
-
+extern uint8_t adc1_callback_ready;
+extern uint8_t adc2_callback_ready;
 /* USER CODE END EV */
 
 /******************************************************************************/
@@ -205,6 +209,35 @@ void SysTick_Handler(void)
 /******************************************************************************/
 
 /**
+  * @brief This function handles DMA1 channel1 global interrupt.
+  */
+void DMA1_Channel1_IRQHandler(void)
+{
+  /* USER CODE BEGIN DMA1_Channel1_IRQn 0 */
+
+  /* USER CODE END DMA1_Channel1_IRQn 0 */
+  HAL_DMA_IRQHandler(&hdma_adc1);
+  /* USER CODE BEGIN DMA1_Channel1_IRQn 1 */
+
+  /* USER CODE END DMA1_Channel1_IRQn 1 */
+}
+
+/**
+  * @brief This function handles ADC1 and ADC2 global interrupts.
+  */
+void ADC1_2_IRQHandler(void)
+{
+  /* USER CODE BEGIN ADC1_2_IRQn 0 */
+
+  /* USER CODE END ADC1_2_IRQn 0 */
+  HAL_ADC_IRQHandler(&hadc1);
+  HAL_ADC_IRQHandler(&hadc2);
+  /* USER CODE BEGIN ADC1_2_IRQn 1 */
+
+  /* USER CODE END ADC1_2_IRQn 1 */
+}
+
+/**
   * @brief This function handles USB low priority or CAN RX0 interrupts.
   */
 void USB_LP_CAN1_RX0_IRQHandler(void)
@@ -232,8 +265,16 @@ void TIM1_UP_IRQHandler(void)
         ++mem.gpio_underflow;
       } else {
         uint8_t tmp = fifo_deque(&mem.fifo0);
+        mem.gpio_out = tmp;
         GPIOB->BSRR = tmp | ( ((uint32_t)(~tmp & 0x0ff))<<16 );  // atomic write
       }
+    }
+    if (mem.adc_count) {
+      --mem.adc_count;
+      adc1_callback_ready = 0;
+      adc2_callback_ready = 0;
+      HAL_ADC_Start_IT(&hadc1);
+      HAL_ADC_Start_IT(&hadc2);
     }
   }
 #if 0

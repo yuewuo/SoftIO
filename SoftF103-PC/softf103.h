@@ -7,7 +7,7 @@
  */
 
 // MCU_VERSION: uint32_t number, like 0x19052200, be sure to update this number when memory is different from before
-#define MCU_VERSION 0x19052200
+#define MCU_VERSION 0x19112500
 // MCU_PID: uint16_t number, the pid to distinguish different devices, you should modify it, for example:
 #define MCU_PID 0x1234
 
@@ -50,12 +50,15 @@ typedef struct {
 	uint8_t gpio_out;  // write to this variable will immediately update GPIO value of PB0 ~ PB7
 	uint8_t gpio_in;  // read PB8 ~ PB15
 	uint32_t gpio_count_add;  // write to atomically add to gpio_count
-	uint32_t gpio_count;  // for data streaming, provide the count of samples. only timer 1 interrupt is valid, and using fifo0
+	uint32_t gpio_count;  // for data streaming, provide the count of samples. only when timer 1 interrupt is valid, and using fifo0
 	uint32_t gpio_underflow;  // record underflow count for sanity check
 
 // read adc value immediately
 	uint16_t adc1;
 	uint16_t adc2;
+	uint32_t adc_count_add;  // write to atomically add to adc_count
+	uint32_t adc_count;  // for data streaming, provide the count of samples. only when timer 1 interrupt is valid, and using fifo1. Writing a non-zero value to this variable will call HAL_ADC_Start_IT, and when adc_count decreases to zero, it will call HAL_ADC_Stop_IT
+	uint32_t adc_overflow;  // record overflow count for sanity check
 
 // LED functions
 	uint8_t led;  // write 1 to open the LED and write 0 to close. only the LSB is used
