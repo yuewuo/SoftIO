@@ -13,9 +13,11 @@ int main(int argc, char** argv) {
 	f103.verbose = true;
 	f103.open(argv[1]);
 
-	softio_blocking(read_between, f103.sio, f103.mem.adc1, f103.mem.adc2);
-    printf("adc1: %d\n", f103.mem.adc1);
-    printf("adc2: %d\n", f103.mem.adc2);
+	auto ret = f103.ADC_read_both();
+	float adc1 = ret.first;
+	float adc2 = ret.second;
+    printf("adc1: %f V\n", adc1);
+    printf("adc2: %f V\n", adc2);
 
 	f103.close();
 
